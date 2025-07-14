@@ -1,23 +1,5 @@
-#B3descriptive_tables_and_figures.R
+#B3descriptive_twoPart.R
 
-# 
-# This script compiles, summarizes, and visualizes Medicare claims analysis results across both descriptive and two-part modeled estimates for beneficiaries with and without HIV. It generates:
-#   
-#   Table 1: HIV prevalence summaries by age, type of care, and year (based on metadata)
-# 
-# Table 2: Stratified descriptive statistics (mean, median, IQR) for cost and utilization
-# 
-# Table 3: Modeled incremental cost summaries (from the two-part model)
-# 
-# Figures: Multiple visualizations including trends over time, differences by HIV status, race, age, and disease category
-# 
-# Outputs include:
-#   
-#   Formatted Excel tables for dissemination
-# 
-# High-resolution JAMA-styled plots (log-transformed where appropriate)
-# 
-# Model diagnostic summaries and p-value distributions
 
 
 rm(list = ls())
@@ -33,15 +15,14 @@ pacman::p_load(ggsci,dplyr, openxlsx, RMySQL,data.table, ini, DBI, tidyr, readr,
 base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis"
 
 # Use today's date dynamically
-date_of_input <- "20250527"
+date_of_input <- "20250624"
 
 # Construct path to Agregators folder
 agregators_folder <- file.path(base_dir, date_of_input, "Agregators")
 
 # Read input files from Agregators folder
-metadata_df <- fread(file.path(agregators_folder, "agregated_meta_table.csv"))
-summary_df <- fread(file.path(agregators_folder, "weighted_summary_table.csv"))
-two_part_df <- fread(file.path(agregators_folder, "weighted_summary_two_part_table.csv"))
+#two_part_all_toc <- fread(file.path(agregators_folder, "weighted_summary_two_part_table_all_toc.csv"))
+two_part_by_toc <- fread(file.path(agregators_folder, "weighted_summary_two_part_table_non_all_toc.csv"))
 
 # Create output folder for tables and figures
 output_folder <- file.path(base_dir, date_of_input, "tablesandfigures")
@@ -53,8 +34,6 @@ if (!dir.exists(output_folder)) {
 
 #####
 
-
-
 #function to save plots
 save_plot <- function(plot_obj, filename) {
   ggsave(filename = file.path(output_folder, filename),
@@ -62,519 +41,93 @@ save_plot <- function(plot_obj, filename) {
          device = "jpeg")
 }
 
-
-jama_palette <- pal_jama("default")(7)
-
-
 # 1. Overall summary
 
 
-summary_by_year <- metadata_df %>%
-  group_by(year_id) %>%
-  summarise(
-    total_beneficiaries = sum(total_unique_bene, na.rm = TRUE),
-    hiv_positive = sum(hiv_unique_bene, na.rm = TRUE),
-    sud_positive = sum(sud_unique_bene, na.rm = TRUE),
-    hcv_positive = sum(hepc_unique_bene, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    hiv_prevalence = hiv_positive / total_beneficiaries,
-    sud_prevalence = sud_positive / total_beneficiaries,
-    hcv_prevalence = hcv_positive / total_beneficiaries,
-    hiv_prevalence_percent = percent(hiv_prevalence, accuracy = 0.1),
-    sud_prevalence_percent = percent(sud_prevalence, accuracy = 0.1),
-    hcv_prevalence_percent = percent(hcv_prevalence, accuracy = 0.1)
-  ) %>%
-  select(
-    year_id,
-    total_beneficiaries,
-    hiv_positive, hiv_prevalence_percent,
-    sud_positive, sud_prevalence_percent,
-    hcv_positive, hcv_prevalence_percent
-  )
+summary(two_part_all_toc)
 
-
-# Prevalence summary by year and type of care
-summary_by_year_toc <- metadata_df %>%
-  group_by(year_id, toc) %>%
-  summarise(
-    total_beneficiaries = sum(total_unique_bene, na.rm = TRUE),
-    hiv_positive = sum(hiv_unique_bene, na.rm = TRUE),
-    sud_positive = sum(sud_unique_bene, na.rm = TRUE),
-    hcv_positive = sum(hepc_unique_bene, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    hiv_prevalence = hiv_positive / total_beneficiaries,
-    sud_prevalence = sud_positive / total_beneficiaries,
-    hcv_prevalence = hcv_positive / total_beneficiaries,
-    hiv_prevalence_percent = percent(hiv_prevalence, accuracy = 0.1),
-    sud_prevalence_percent = percent(sud_prevalence, accuracy = 0.1),
-    hcv_prevalence_percent = percent(hcv_prevalence, accuracy = 0.1)
-  ) %>%
-  select(
-    year_id, toc,
-    total_beneficiaries,
-    hiv_positive, hiv_prevalence_percent,
-    sud_positive, sud_prevalence_percent,
-    hcv_positive, hcv_prevalence_percent
-  )
-
-
-# 2. Summary by age group
-age_summary <- metadata_df %>%
-  group_by(age_group_years_start) %>%
-  summarise(
-    total_beneficiaries = sum(total_unique_bene),
-    hiv_positive_beneficiaries = sum(hiv_unique_bene),
-    hiv_prevalence = hiv_positive_beneficiaries / total_beneficiaries
-  ) %>%
-  mutate(
-    hiv_prevalence_percent = percent(hiv_prevalence, accuracy = 0.1),
-    category = "Age Group",
-    subgroup = as.character(age_group_years_start)
-  ) %>%
-  select(-hiv_prevalence)
-
-# 3. Summary by type of care
-toc_summary <- metadata_df %>%
-  group_by(toc) %>%
-  summarise(
-    total_beneficiaries = sum(total_unique_bene, na.rm = TRUE),
-    hiv_positive = sum(hiv_unique_bene, na.rm = TRUE),
-    sud_positive = sum(sud_unique_bene, na.rm = TRUE),
-    hcv_positive = sum(hepc_unique_bene, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    hiv_prevalence = hiv_positive / total_beneficiaries,
-    sud_prevalence = sud_positive / total_beneficiaries,
-    hcv_prevalence = hcv_positive / total_beneficiaries,
-    hiv_prevalence_percent = percent(hiv_prevalence, accuracy = 0.1),
-    sud_prevalence_percent = percent(sud_prevalence, accuracy = 0.1),
-    hcv_prevalence_percent = percent(hcv_prevalence, accuracy = 0.1),
-    category = "Type of Care",
-    subgroup = toc
-  ) %>%
-  select(category, subgroup,
-         total_beneficiaries,
-         hiv_positive, hiv_prevalence_percent,
-         sud_positive, sud_prevalence_percent,
-         hcv_positive, hcv_prevalence_percent)
-
-
-
-####
-# Save each summary as separate CSV files
-fwrite(summary_by_year, file.path(output_folder, "table1a_summary_by_year.csv"))
-fwrite(summary_by_year_toc, file.path(output_folder, "table1b_summary_by_year_toc.csv"))
-fwrite(age_summary, file.path(output_folder, "table1c_summary_by_age.csv"))
-fwrite(toc_summary, file.path(output_folder, "table1d_summary_by_toc.csv"))
-
-cat("✅ Table 1 CSV files saved to:", output_folder, "\n")
-
-
-#####
-
-
-
-# Note: Total beneficiary counts represent stratified records by age group, type of care, year,
-# and coding system. Individuals may appear in multiple subgroups. HIV prevalence is calculated 
-# as the proportion of beneficiaries with HIV-coded claims within each stratum.
-##########################################
-
-# colnames(summary_df)
-# summary(summary_df)
-# Define output path
-#table1a_outfile <- file.path(figures_folder, "table1a_summary_statistics.csv")
-
-# Updated summarizer to align with actual column names
-summarize_table <- function(df, group_var) {
-  df %>%
-    group_by({{ group_var }}) %>%
-    summarise(
-      median_avg_cost = median(avg_cost_per_bene, na.rm = TRUE),
-      mean_avg_cost = mean(avg_cost_per_bene, na.rm = TRUE),
-      iqr_avg_cost = IQR(avg_cost_per_bene, na.rm = TRUE),
-      
-      median_max_cost = median(max_cost_per_bene, na.rm = TRUE),
-      mean_max_cost = mean(max_cost_per_bene, na.rm = TRUE),
-      iqr_max_cost = IQR(max_cost_per_bene, na.rm = TRUE),
-      
-      median_quant99 = median(quantile_99_cost_per_bene, na.rm = TRUE),
-      mean_quant99 = mean(quantile_99_cost_per_bene, na.rm = TRUE),
-      iqr_quant99 = IQR(quantile_99_cost_per_bene, na.rm = TRUE),
-      
-      median_total_cost = median(sum_cost_per_group, na.rm = TRUE),
-      mean_total_cost = mean(sum_cost_per_group, na.rm = TRUE),
-      iqr_total_cost = IQR(sum_cost_per_group, na.rm = TRUE),
-      
-      median_avg_encounters = median(avg_encounters_per_bene, na.rm = TRUE),
-      mean_avg_encounters = mean(avg_encounters_per_bene, na.rm = TRUE),
-      iqr_avg_encounters = IQR(avg_encounters_per_bene, na.rm = TRUE),
-      
-      median_total_encounters = median(sum_encounters_per_group, na.rm = TRUE),
-      iqr_total_encounters = IQR(sum_encounters_per_group, na.rm = TRUE),
-      
-      median_total_bene = median(total_unique_bene, na.rm = TRUE),
-      iqr_total_bene = IQR(total_unique_bene, na.rm = TRUE),
-      .groups = "drop"
-    )
-}
-
-# Run stratified summaries
-table_2a <- summarize_table(summary_df, has_hiv)
-table_2b <- summarize_table(summary_df, has_sud)
-table_2c <- summarize_table(summary_df, has_hepc)
-table_2d <- summarize_table(summary_df, acause)
-table_2e <- summarize_table(summary_df, year_id)
-table_2f <- summarize_table(summary_df, race_cd)
-table_2g <- summarize_table(summary_df, toc)
-table_2h <- summarize_table(summary_df, age_group_years_start)
-
-# Save each summary to CSV in the tablesandfigures folder
-fwrite(table_2a, file.path(output_folder, "table2a_by_hiv_status.csv"))
-fwrite(table_2b, file.path(output_folder, "table2b_by_sud_status.csv"))
-fwrite(table_2c, file.path(output_folder, "table2c_by_hepc_status.csv"))
-fwrite(table_2d, file.path(output_folder, "table2d_by_disease.csv"))
-fwrite(table_2e, file.path(output_folder, "table2e_by_year.csv"))
-fwrite(table_2f, file.path(output_folder, "table2f_by_race.csv"))
-fwrite(table_2g, file.path(output_folder, "table2g_by_type_of_care.csv"))
-fwrite(table_2h, file.path(output_folder, "table2h_by_age_group.csv"))
-
-cat("Table 2 CSV summaries saved to:", output_folder, "\n")
-
-
-# # Helper functions
-# 
-# summarize_table <- function(df, group_var) {
-#   df %>%
-#     group_by({{ group_var }}) %>%
-#     summarise(
-#       median_avg_cost = median(avg_cost_per_bene, na.rm = TRUE),
-#       mean_avg_cost = mean(avg_cost_per_bene, na.rm = TRUE),
-#       iqr_avg_cost = IQR(avg_cost_per_bene, na.rm = TRUE),
-#       
-#       median_max_cost = median(max_cost_per_bene, na.rm = TRUE),
-#       mean_max_cost = mean(max_cost_per_bene, na.rm = TRUE),
-#       iqr_max_cost = IQR(max_cost_per_bene, na.rm = TRUE),
-#       
-#       median_quant99 = median(quant99, na.rm = TRUE),
-#       mean_quant99 = mean(quant99, na.rm = TRUE),
-#       iqr_quant99 = IQR(quant99, na.rm = TRUE),
-#       
-#       median_total_cost = median(total_cost, na.rm = TRUE),
-#       mean_total_cost = mean(total_cost, na.rm = TRUE),
-#       iqr_total_cost = IQR(total_cost, na.rm = TRUE),
-#       
-#       median_avg_encounters = round(median(avg_encounters_per_bene, na.rm = TRUE), 2),
-#       mean_avg_encounters = round(mean(avg_encounters_per_bene, na.rm = TRUE), 2),
-#       iqr_avg_encounters = round(IQR(avg_encounters_per_bene, na.rm = TRUE), 2),
-#       
-#       median_total_encounters = median(total_encounters, na.rm = TRUE),
-#       iqr_total_encounters = IQR(total_encounters, na.rm = TRUE),
-#       
-#       median_total_bene = median(total_unique_bene, na.rm = TRUE),
-#       iqr_total_bene = IQR(total_unique_bene, na.rm = TRUE),
-#       
-#       mean_any_cost = percent(mean(mean_any_cost, na.rm = TRUE), accuracy = 0.1),
-#       .groups = "drop"
-#     )
-# }
-# 
-# 
-# 
-# # Run stratified summaries
-# table_1b <- summarize_table(summary_df, has_hiv)
-# table_1c <- summarize_table(summary_df, acause)
-# table_1d <- summarize_table(summary_df, year_id)
-# table_1e <- summarize_table(summary_df, race_cd)
-# table_1f <- summarize_table(summary_df, toc)
-# table_1g <- summarize_table(summary_df, age_group_years_start)
-# 
-# # Name each as a sheet
-# table_list <- list(
-#   "By HIV Status" = table_1b,
-#   "By Disease" = table_1c,
-#   "By Year" = table_1d,
-#   "By Race" = table_1e,
-#   "By Type of Care" = table_1f,
-#   "By Age Group" = table_1g
-# )
-# 
-# # Save all sheets to one Excel file
-# write_xlsx(table_list, path = file.path(figures_folder, "table2_stratified_summaries.xlsx"))
-# 
-# cat("âœ… All stratified Table 1 summaries saved to one Excel file with separate tabs.\n")
-# 
-
-
-
-####
 
 
 jama_palette <- pal_jama("default")(7)
 
 
-# ---- p1: Cost by HIV status, faceted by Type of Care ----
-p1 <- summary_df %>%
-  group_by(has_hiv, toc) %>%
-  summarise(median_cost = median(avg_cost_per_bene, na.rm = TRUE), .groups = "drop") %>%
-  mutate(hiv_status = ifelse(has_hiv == 1, "HIV+", "HIV-")) %>%
-  ggplot(aes(x = hiv_status, y = median_cost, fill = hiv_status)) +
-  geom_col(color = "black") +
-  facet_wrap(~ toc) +
-  scale_y_continuous(labels = scales::dollar_format()) +
-  scale_fill_manual(values = jama_palette[1:2]) +
-  labs(
-    title = "Median Cost per Beneficiary by HIV Status and Type of Care",
-    x = "HIV Status", y = "Cost (USD)", fill = "HIV Status"
-  ) +
-  theme_minimal(base_size = 13)
-
-save_plot(p1, "desc_cost_by_hiv_status_facet_toc.jpeg")
-
-
-# ---- p2: Cost by Year, faceted by Type of Care ----
-p2 <- summary_df %>%
-  group_by(year_id, toc) %>%
-  summarise(median_cost = median(avg_cost_per_bene, na.rm = TRUE), .groups = "drop") %>%
-  ggplot(aes(x = year_id, y = median_cost)) +
-  geom_line(color = jama_palette[3], linewidth = 1.2) +
-  geom_point(color = jama_palette[3], size = 2) +
-  facet_wrap(~ toc) +
-  scale_y_continuous(labels = scales::dollar_format()) +
-  scale_x_continuous(breaks = seq(2008, 2019, 1)) +
-  labs(
-    title = "Median Cost per Beneficiary by Year and Type of Care",
-    x = "Year", y = "Cost (USD)"
-  ) +
-  theme_minimal(base_size = 13)
-
-save_plot(p2, "desc_cost_by_year_facet_toc.jpeg")
-
-
-
-p3 <- summary_df %>%
-  ggplot(aes(x = avg_cost_per_bene)) +
-  geom_histogram(binwidth = 1000, fill = jama_palette[4], color = "white") +
-  scale_x_continuous(labels = dollar_format(), limits = c(0, 50000)) +
-  #facet_wrap(~ toc) +
-  labs(title = "Distribution of Average Cost per Beneficiary",
-       x = "Avg Cost (USD)", y = "Count") +
-  theme_minimal(base_size = 13)
-
-save_plot(p3, "desc_hist_avg_cost_per_bene.jpeg")
-
-# mean(summary_df$avg_cost_per_bene)
-# median(summary_df$avg_cost_per_bene)
-
-# Count distinct diseases to set palette size
-n_acause <- summary_df %>% distinct(acause) %>% nrow()
-
-p4 <- summary_df %>%
-  group_by(acause) %>%
+# Summary Table 1 - by Level 2 and Level 1 causes
+summary_lvl2 <- two_part_all_toc %>%
+  group_by(acause_lvl2, cause_name_lvl2) %>%
   summarise(
-    avg_cost_per_bene = weighted.mean(avg_cost_per_bene, total_unique_bene, na.rm = TRUE),
+    mean_cost = mean(mean_cost, na.rm = TRUE),
+    mean_cost_hiv = mean(mean_cost_hiv, na.rm = TRUE),
+    mean_cost_sud = mean(mean_cost_sud, na.rm = TRUE),
+    mean_cost_hiv_sud = mean(mean_cost_hiv_sud, na.rm = TRUE),
+    total_bins = sum(total_bin_count, na.rm = TRUE),
     .groups = "drop"
-  ) %>%
-  ggplot(aes(x = reorder(acause, avg_cost_per_bene), y = avg_cost_per_bene, fill = acause)) +
-  geom_bar(stat = "identity") +
-  geom_text(aes(label = scales::dollar(avg_cost_per_bene)),
-            hjust = 1.1, color = "white", size = 4) +
-  scale_fill_manual(values = rep(jama_palette, length.out = n_acause)) +
-  coord_flip() +
-  labs(
-    title = "Average Cost per Beneficiary by Disease Category",
-    x = "Disease Category", y = "Average Cost (2019 USD)"
-  ) +
-  theme_minimal(base_size = 13) +
-  theme(legend.position = "none")
+  )
 
-save_plot(p4, "desc_cost_by_disease_labeled_jama.jpeg")
-
-
-
-p5 <- summary_df %>%
-  group_by(toc, race_cd) %>%
-  summarise(median_cost = median(avg_cost_per_bene, na.rm = TRUE), .groups = "drop") %>%
-  ggplot(aes(x = reorder(toc, median_cost), y = median_cost, fill = toc)) +
-  geom_col(color = "black") +
-  coord_flip() +
-  facet_wrap(~ race_cd) +
-  scale_y_continuous(labels = scales::dollar_format()) +
-  scale_fill_manual(values = jama_palette) +
-  labs(
-    title = "Median Cost per Beneficiary by Type of Care and Disease Category",
-    x = "Type of Care", y = "Median Cost (USD)"
-  ) +
-  theme_minimal(base_size = 13) +
-  theme(legend.position = "none")
-
-save_plot(p5, "desc_cost_by_toc_facet_disease.jpeg")
-
-
-
-p6a <- summary_df %>%
-  ggplot(aes(x = factor(age_group_years_start), y = log(avg_encounters_per_bene), fill = factor(age_group_years_start))) +
-  geom_boxplot(color = "black") +
-  facet_wrap(~ acause, scales = "free_y") +
-  scale_fill_manual(values = jama_palette) +
-  labs(
-    title = "Log Average Encounters per Beneficiary by Age Group and Disease Category",
-    x = "Age Group", y = "Log(Average Encounters)", fill = "Age Group"
-  ) +
-  theme_minimal(base_size = 13) +
-  theme(legend.position = "none")
-
-save_plot(p6a, "desc_log_encounters_by_agegroup_acause.jpeg")
-
-
-p7<- summary_df %>%
-  ggplot(aes(x = factor(age_group_years_start), y = log(avg_encounters_per_bene), fill = factor(age_group_years_start))) +
-  geom_boxplot(color = "black") +
-  facet_wrap(~ toc) +
-  scale_fill_manual(values = jama_palette) +
-  labs(
-    title = "Log Average Encounters per Beneficiary by Age Group and Type of Care",
-    x = "Age Group", y = "Log(Avg Encounters)", fill = "Age Group"
-  ) +
-  theme_minimal(base_size = 13) +
-  theme(legend.position = "none")
-
-save_plot(p7, "desc_log_encounters_by_agegroup_toc.jpeg")
-
-
-
-
-####
-p8 <- summary_df %>%
-  ggplot(aes(x = avg_encounters_per_bene,
-             y = avg_cost_per_bene,
-             color = toc)) +
-  geom_point(alpha = 0.6, size = 2) +
-  scale_y_log10(labels = dollar_format()) +
-  scale_x_log10() +
-  scale_color_manual(values = jama_palette) +
-  labs(
-    title = "Encounters vs Average Cost (log-log scale)",
-    subtitle = "Colored by Type of Care",
-    x = "Avg Encounters per Beneficiary",
-    y = "Avg Cost (USD, log scale)",
-    color = "Type of Care"
-  ) +
-  theme_minimal(base_size = 13)
-
-###
-p8b <- summary_df %>%
-  ggplot(aes(x = avg_encounters_per_bene,
-             y = avg_cost_per_bene,
-             color = toc)) +
-  geom_point(alpha = 0.6, size = 2) +
-  scale_y_log10(labels = dollar_format()) +
-  scale_x_log10() +
-  scale_color_manual(values = jama_palette) +
-  facet_wrap(~ has_hiv, labeller = labeller(has_hiv = c("0" = "HIV-", "1" = "HIV+"))) +
-  labs(
-    title = "Encounters vs Average Cost (log-log scale), by HIV Status",
-    subtitle = "Colored by Type of Care",
-    x = "Avg Encounters per Beneficiary",
-    y = "Avg Cost (USD, log scale)",
-    color = "Type of Care"
-  ) +
-  theme_minimal(base_size = 13)
-
-
-save_plot(p8b, "desc_scatter_encounters_vs_cost_by_toc.jpeg")
-
-
-p9 <- ggplot(summary_df, aes(x = factor(age_group_years_start), y = avg_cost_per_bene, fill = factor(age_group_years_start))) +
-  geom_boxplot(color = "black") +
-  scale_y_log10(labels = dollar_format()) +
-  facet_wrap(~race_cd) +
-  scale_fill_manual(values = jama_palette) +
-  labs(
-    title = "Average Cost per Beneficiary by Age Group (Faceted by Race)",
-    x = "Age Group", y = "Avg Cost (USD, log scale)", fill = "Age"
-  ) +
-  theme_minimal(base_size = 13) +
-  theme(legend.position = "none")
-
-save_plot(p9, "desc_cost_by_agegroup_facet_race.jpeg")
-
-
-
-
-p10 <- summary_df %>%
-  group_by(toc) %>%
+summary_lvl1 <- two_part_all_toc %>%
+  group_by(acause_lvl1, cause_name_lvl1) %>%
   summarise(
-    avg_cost_per_bene = weighted.mean(avg_cost_per_bene, total_unique_bene, na.rm = TRUE),
+    mean_cost = mean(mean_cost, na.rm = TRUE),
+    mean_cost_hiv = mean(mean_cost_hiv, na.rm = TRUE),
+    mean_cost_sud = mean(mean_cost_sud, na.rm = TRUE),
+    mean_cost_hiv_sud = mean(mean_cost_hiv_sud, na.rm = TRUE),
+    total_bins = sum(total_bin_count, na.rm = TRUE),
     .groups = "drop"
-  ) %>%
-  ggplot(aes(x = reorder(toc, avg_cost_per_bene), y = avg_cost_per_bene, fill = toc)) +
-  geom_bar(stat = "identity", color = "black") +
-  geom_text(aes(label = dollar(avg_cost_per_bene)), vjust = -0.3, size = 4) +
-  scale_y_log10(labels = dollar_format()) +
-  scale_fill_manual(values = jama_palette) +
-  labs(
-    title = "Average Cost per Beneficiary by Type of Care",
-    x = "Type of Care", y = "Average Cost (USD, log scale)", fill = "Type of Care"
-  ) +
-  theme_minimal(base_size = 13) +
-  theme(legend.position = "none")
-
-save_plot(p10, "desc_cost_by_toc_log_labeled.jpeg")
+  )
 
 
+# Summary by Year and Level 2 causes
+summary_year_lvl2 <- two_part_all_toc %>%
+  group_by(year_id, acause_lvl2, cause_name_lvl2) %>%
+  summarise(
+    mean_cost = mean(mean_cost, na.rm = TRUE),
+    mean_cost_hiv = mean(mean_cost_hiv, na.rm = TRUE),
+    mean_cost_sud = mean(mean_cost_sud, na.rm = TRUE),
+    mean_cost_hiv_sud = mean(mean_cost_hiv_sud, na.rm = TRUE),
+    total_bins = sum(total_bin_count, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Summary by Year and Level 1 causes
+summary_year_lvl1 <- two_part_all_toc %>%
+  group_by(year_id, acause_lvl1, cause_name_lvl1) %>%
+  summarise(
+    mean_cost = mean(mean_cost, na.rm = TRUE),
+    mean_cost_hiv = mean(mean_cost_hiv, na.rm = TRUE),
+    mean_cost_sud = mean(mean_cost_sud, na.rm = TRUE),
+    mean_cost_hiv_sud = mean(mean_cost_hiv_sud, na.rm = TRUE),
+    total_bins = sum(total_bin_count, na.rm = TRUE),
+    .groups = "drop"
+  )
 
 
-p11 <- summary_df %>%
-  group_by(year_id, has_hiv) %>%
-  summarise(med_cost = median(avg_cost_per_bene, na.rm = TRUE), .groups = "drop") %>%
-  mutate(
-    year_id = as.integer(year_id),
-    hiv_status = ifelse(has_hiv == 1, "HIV+", "HIV-")
-  ) %>%
-  ggplot(aes(x = year_id, y = med_cost, color = hiv_status, group = hiv_status)) +
-  geom_line(linewidth = 1.2) +
+# Save all four summary tables into one Excel file
+write.xlsx(
+  list(
+    "Level 2 (All Years)"     = summary_lvl2,
+    "Level 1 (All Years)"     = summary_lvl1,
+    "Level 2 by Year"         = summary_year_lvl2,
+    "Level 1 by Year"         = summary_year_lvl1
+  ),
+  file = file.path(output_folder, "table1_modeled_summary_costs.xlsx")
+)
+
+cat("All summary tables saved to 'table1_modeled_summary_costs.xlsx'\n")
+
+
+#######
+library(ggplot2)
+
+# Plot: Mean cost by year and cause level 1
+ggplot(summary_year_lvl1, aes(x = year_id, y = mean_cost, color = cause_name_lvl1, group = cause_name_lvl1)) +
+  geom_line(size = 1.2) +
   geom_point(size = 2) +
-  scale_x_continuous(breaks = seq(2008, 2019, 1)) +
-  scale_y_continuous(labels = dollar_format()) +
-  scale_color_manual(values = jama_palette[1:2]) +
   labs(
-    title = "Median Cost per Beneficiary by Year and HIV Status",
-    x = "Year", y = "Median Cost (USD)", color = "HIV Status"
+    title = "Mean Cost by Year and Level 1 Cause",
+    x = "Year", y = "Mean Cost (USD)",
+    color = "Level 1 Cause"
   ) +
-  theme_minimal(base_size = 13)
-
-save_plot(p11, "desc_cost_by_year_and_hiv_status.jpeg")
-
-
-p12 <- summary_df %>%
-  group_by(year_id, toc) %>%
-  summarise(
-    total_bene = sum(total_unique_bene, na.rm = TRUE),
-    avg_cost = weighted.mean(avg_cost_per_bene, total_unique_bene, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  mutate(year_id = as.integer(year_id)) %>%
-  ggplot(aes(x = year_id, y = avg_cost, size = total_bene, fill = toc)) +
-  geom_point(shape = 21, color = "black", alpha = 0.85) +
-  scale_y_continuous(labels = dollar_format()) +
-  scale_size_continuous(range = c(3, 15), name = "Total Beneficiaries", labels = comma_format()) +
-  scale_fill_manual(values = jama_palette, name = "Type of Care") +
-  scale_x_continuous(breaks = seq(2008, 2019, 1)) +
-  labs(
-    title = "Average Cost per Beneficiary by Year and Type of Care",
-    subtitle = "Bubble size reflects sample size",
-    x = "Year", y = "Average Cost (USD)"
-  ) +
-  theme_minimal(base_size = 13)
-
-save_plot(p12, "desc_cost_by_year_bubble_toc.jpeg")
-
-
+  theme_minimal(base_size = 14) +
+  scale_x_continuous(breaks = seq(min(summary_year_lvl1$year_id), max(summary_year_lvl1$year_id), 1))
 
 
 # ---- ###### ----
