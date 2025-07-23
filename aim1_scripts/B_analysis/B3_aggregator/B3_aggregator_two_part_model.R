@@ -196,11 +196,10 @@ tabexam <-master_table %>%
 
 
 # Create subset excluding all toc
-
 df_non_all_toc <- master_table %>% filter(!grepl("^all_toc", toc))
-
-
 write_csv(df_non_all_toc, file.path(output_folder, "weighted_summary_two_part_table_master.csv"))
+
+### See above, I had somethibg similar that was taking over only all_toc but in the two part model somethibg was wrong with creating summares
 
 
 
