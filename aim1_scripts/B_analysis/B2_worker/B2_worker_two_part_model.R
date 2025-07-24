@@ -1,12 +1,9 @@
 ##----------------------------------------------------------------
 ##' Title: B2_worker_two_part_model.R
 ##' Notes: # For the future check bootstrap for finite populations
-##' Outputs: /mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/04.Two_Part_Estimates/<date>/"
+##' Outputs: /mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/04.Two_Part_Estimates/<date>/bootstrap_results/
+##'          /mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/04.Two_Part_Estimates/<date>/boot_chunks/
 ##----------------------------------------------------------------
-
-# # This works *inside the container* where /Volumes/ is remounted under /mnt/share
-# f <- read_parquet("/mnt/share/Volumes/limited_use/LU_CMS/DEX/hivsud/aim1/output_aim1/20250413/compiled_F2T_data_2008.parquet")
-# 
 
 # Clear environment and set library paths
 rm(list = ls())
@@ -35,9 +32,6 @@ if (Sys.info()["sysname"] == 'Linux'){
 # 0. Read in data from SLURM job submission
 ##----------------------------------------------------------------
 
-# fp_parameters_input <- "/ihme/limited_use/LU_CMS/DEX/hivsud/aim1/resources_aim1/two_part_model_parameters_aim1.csv"
-# array_job_number <- 9
-
 if (interactive()) {
   path <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/bested/aggregated_by_year/compiled_RX_data_2010_age65.parquet"
   #path <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/bested/aggregated_by_year/compiled_F2T_data_2010_age65.parquet"
@@ -47,6 +41,17 @@ if (interactive()) {
   year_id <- 2010
   file_type <- "RX"
   age_group_years_start <- df$age_group_years_start[1]
+  
+  # Optional code to remove low count acause_lvl2 and fix factors only having 0's or 1's
+  # # remove low count ones
+  # count <- df %>% count(acause_lvl2)
+  # keep_cause <- count[order(-n)]$acause_lvl2[1:(length(count$acause_lvl2) - 6)]
+  # df <- df[df$acause_lvl2 %in% keep_cause, ]
+  # 
+  # # fix 0 and 1 factor to be more even
+  # df[1:5000, sex_id := 0]
+  # df[1:2500, has_hiv := 1]
+  # df[2500:7500, has_sud := 0]
   
 } else {
   # Read job args from SUBMIT_ARRAY_JOB
@@ -109,15 +114,13 @@ ensure_dir_exists(log_folder)
 ## 2. Convert key variables to factors for modeling purposes
 ##----------------------------------------------------------------
 # --- Assign explicit factor variable for toc ---
-toc_levels <- c("AM", "ED", "HH", "IP", "NF", "RX")  # add RX if it's a possible toc
-
-df[, toc_fact := factor(as.character(toc), levels = toc_levels)]   # always convert to character first!
+toc_levels <- c("AM", "ED", "HH", "IP", "NF", "RX")
 
 df[, `:=`(
   acause_lvl2   = factor(acause_lvl2),
   race_cd       = factor(race_cd),
   sex_id        = factor(sex_id),
-  #toc_fact      = factor(toc_fact),                
+  toc_fact      = factor(as.character(toc), levels = toc_levels),         
   has_hiv       = factor(has_hiv, levels = c(0, 1)),
   has_sud       = factor(has_sud, levels = c(0, 1)),
   has_hepc      = factor(has_hepc, levels = c(0, 1)),
@@ -128,6 +131,7 @@ df[, `:=`(
 ##----------------------------------------------------------------
 ## 3. Build bin distribution from the full data, used in bootstrapping
 ##----------------------------------------------------------------
+
 df_bins_master <- df %>%
   group_by(acause_lvl2, race_cd, sex_id, age_group_years_start, toc_fact) %>%
   summarise(row_count = n(), .groups="drop") %>%
@@ -144,12 +148,12 @@ grid_input_master <- df_bins_master %>%
   left_join(df_bins_master, by = c("acause_lvl2", "race_cd", "sex_id", "age_group_years_start", "toc_fact"))
 
 ##----------------------------------------------------------------
-## 4. BOOTSTRAP
+## 4. Bootstrap
 ##----------------------------------------------------------------
 
 # Dynamically set bootstrap iteration number based on filetype 
 if (file_type == "RX") {
-  B <- 10 # RX
+  B <- 2 # RX (2 iterations can finish within ~24 hours or so)
   } else {
   B <- 40 # F2T processed on 40
   }
@@ -285,60 +289,17 @@ df_summary <- boot_combined %>%
   ) %>%
   left_join(df_bins_summary, by = c("acause_lvl2", "race_cd", "age_group_years_start", "toc_fact"))
 
-df_all_race <- df_summary %>%
-  group_by(acause_lvl2, age_group_years_start, toc_fact) %>%
-  summarise(
-    race_cd = "all_race",
-
-    mean_cost_neither    = sum(mean_cost_neither * avg_row_count, na.rm=TRUE) / sum(avg_row_count, na.rm=TRUE),
-    mean_cost_hiv_only   = sum(mean_cost_hiv_only * avg_row_count, na.rm=TRUE) / sum(avg_row_count, na.rm=TRUE),
-    mean_cost_sud_only   = sum(mean_cost_sud_only * avg_row_count, na.rm=TRUE) / sum(avg_row_count, na.rm=TRUE),
-    mean_cost_hiv_sud    = sum(mean_cost_hiv_sud * avg_row_count, na.rm=TRUE) / sum(avg_row_count, na.rm=TRUE),
-
-    lower_ci_neither     = sum(lower_ci_neither * avg_row_count, na.rm=TRUE) / sum(avg_row_count, na.rm=TRUE),
-    upper_ci_neither     = sum(upper_ci_neither * avg_row_count, na.rm=TRUE) / sum(avg_row_count, na.rm=TRUE),
-    lower_ci_hiv_only    = sum(lower_ci_hiv_only * avg_row_count, na.rm=TRUE) / sum(avg_row_count, na.rm=TRUE),
-    upper_ci_hiv_only    = sum(upper_ci_hiv_only * avg_row_count, na.rm=TRUE) / sum(avg_row_count, na.rm=TRUE),
-    lower_ci_sud_only    = sum(lower_ci_sud_only * avg_row_count, na.rm=TRUE) / sum(avg_row_count, na.rm=TRUE),
-    upper_ci_sud_only    = sum(upper_ci_sud_only * avg_row_count, na.rm=TRUE) / sum(avg_row_count, na.rm=TRUE),
-    lower_ci_hiv_sud     = sum(lower_ci_hiv_sud * avg_row_count, na.rm=TRUE) / sum(avg_row_count, na.rm=TRUE),
-    upper_ci_hiv_sud     = sum(upper_ci_hiv_sud * avg_row_count, na.rm=TRUE) / sum(avg_row_count, na.rm=TRUE),
-
-    mean_delta_hiv_only   = sum(mean_delta_hiv_only * avg_row_count, na.rm=TRUE) / sum(avg_row_count, na.rm=TRUE),
-    mean_delta_sud_only   = sum(mean_delta_sud_only * avg_row_count, na.rm=TRUE) / sum(avg_row_count, na.rm=TRUE),
-    mean_delta_hiv_sud    = sum(mean_delta_hiv_sud * avg_row_count, na.rm=TRUE) / sum(avg_row_count, na.rm=TRUE),
-
-    lower_ci_delta_hiv_only   = sum(lower_ci_delta_hiv_only * avg_row_count, na.rm=TRUE) / sum(avg_row_count, na.rm=TRUE),
-    upper_ci_delta_hiv_only   = sum(upper_ci_delta_hiv_only * avg_row_count, na.rm=TRUE) / sum(avg_row_count, na.rm=TRUE),
-    lower_ci_delta_sud_only   = sum(lower_ci_delta_sud_only * avg_row_count, na.rm=TRUE) / sum(avg_row_count, na.rm=TRUE),
-    upper_ci_delta_sud_only   = sum(upper_ci_delta_sud_only * avg_row_count, na.rm=TRUE) / sum(avg_row_count, na.rm=TRUE),
-    lower_ci_delta_hiv_sud    = sum(lower_ci_delta_hiv_sud * avg_row_count, na.rm=TRUE) / sum(avg_row_count, na.rm=TRUE),
-    upper_ci_delta_hiv_sud    = sum(upper_ci_delta_hiv_sud * avg_row_count, na.rm=TRUE) / sum(avg_row_count, na.rm=TRUE),
-
-    avg_row_count = sum(avg_row_count, na.rm=TRUE),
-    .groups = "drop"
-  )
-
-# Bind with existing per-race data (df_summary)
-df_summary <- bind_rows(df_summary, df_all_race)
-
-# Add in year_id, file_type, correctly label age_group_years_start & toc specifically for the "all_races" data
+# Add in year_id, file_type
 df_summary <- df_summary %>%
   mutate(
     year_id = year_id,
-    file_type = file_type,
-    # Aggregate toc label
-    toc = ifelse(race_cd == "all_race", paste0("all_toc_", age_group_years_start), as.character(toc_fact)), # Consider changing to better differentiate between F2T and RX
-    # Aggregate race label
-    race_cd = ifelse(race_cd == "all_race", paste0("all_race_", age_group_years_start), race_cd)
-  )
-
-# Drop "toc_fact" column
-df_summary <- df_summary %>% select(-toc_fact)
+    file_type = file_type)
 
 # Rename columns
 df_summary <- df_summary %>%
   rename(
+    toc                 = toc_fact,
+    
     mean_cost           = mean_cost_neither,
     lower_ci            = lower_ci_neither,
     upper_ci            = upper_ci_neither,
