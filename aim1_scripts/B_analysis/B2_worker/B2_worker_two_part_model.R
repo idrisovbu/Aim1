@@ -1,15 +1,13 @@
 ##----------------------------------------------------------------
 ##' Title: B2_worker_two_part_model.R
 ##' Notes: # For the future check bootstrap for finite populations
+##' Outputs: /mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/04.Two_Part_Estimates/<date>/"
 ##----------------------------------------------------------------
 
-# library(arrow)
-# 
 # # This works *inside the container* where /Volumes/ is remounted under /mnt/share
 # f <- read_parquet("/mnt/share/Volumes/limited_use/LU_CMS/DEX/hivsud/aim1/output_aim1/20250413/compiled_F2T_data_2008.parquet")
 # 
 
-###
 # Clear environment and set library paths
 rm(list = ls())
 pacman::p_load(arrow, dplyr, openxlsx, RMySQL, data.table, ini, DBI, tidyr, openxlsx,glmnet)
@@ -41,8 +39,8 @@ if (Sys.info()["sysname"] == 'Linux'){
 # array_job_number <- 9
 
 if (interactive()) {
-  path <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/20250620/aggregated_by_year/compiled_RX_data_2010_age65.parquet"
-  #path <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/20250620/aggregated_by_year/compiled_F2T_data_2010_age65.parquet"
+  path <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/bested/aggregated_by_year/compiled_RX_data_2010_age65.parquet"
+  #path <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/bested/aggregated_by_year/compiled_F2T_data_2010_age65.parquet"
   # df <- read_parquet(path) %>% sample_n(10000) # This loads the whole dataset in and takes a long time
   df <- open_dataset(path) %>% head(100000) %>% collect() %>% sample_n(10000) # Only reads first 100,000 rows, then samples 10,000, much faster
   df <- as.data.table(df)  
@@ -69,20 +67,15 @@ if (interactive()) {
   # Load data (can switch to open_dataset() if needed)
   df <- read_parquet(fp_input) %>% as.data.table()
   age_group_years_start <- df$age_group_years_start[1]  # take the first row value, assuming all rows have the same age
-  
 }
 
-
 ##----------------------------------------------------------------
-## 1. Create directory folders 
+## 0.1. Functions
 ##----------------------------------------------------------------
-# Define base output directory
-base_output_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis"
-date_folder <- format(Sys.time(), "%Y%m%d")
-output_folder <- file.path(base_output_dir, date_folder)
-
-# Define subfolders for output types
-two_part_stats_folder <- file.path(output_folder, "04.Two_Part_Estimates")
+# Function to generate output filenames based on file type and year
+generate_filename <- function(prefix, extension) {
+  paste0(prefix, "_", file_type, "_year", year_id, "_age", age_group_years_start, extension)
+}
 
 # Utility function to create directories recursively
 ensure_dir_exists <- function(dir_path) {
@@ -91,25 +84,30 @@ ensure_dir_exists <- function(dir_path) {
   }
 }
 
-# Create all necessary directories
-ensure_dir_exists(output_folder)
-ensure_dir_exists(two_part_stats_folder)
+##----------------------------------------------------------------
+## 1. Create directory folders 
+##----------------------------------------------------------------
+
+# Define base output directory
+base_output_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis"
+date_folder <- format(Sys.time(), "%Y%m%d")
+output_folder <- file.path(base_output_dir, "04.Two_Part_Estimates", date_folder)
+
+# Define subfolders for output types
+bootstrap_results_output_folder <- file.path(output_folder, "bootstrap_results")
+bootstrap_chunks_output_folder <- file.path(output_folder, "boot_chunks", generate_filename("boot", ""))
 
 # Create logs subfolder inside summary stats
-log_folder <- file.path(two_part_stats_folder, "logs")
+log_folder <- file.path(base_output_dir, "logs")
+
+# Create all necessary directories
+ensure_dir_exists(bootstrap_results_output_folder)
+ensure_dir_exists(bootstrap_chunks_output_folder)
 ensure_dir_exists(log_folder)
-
-# Function to generate output filenames based on file type and year
-generate_filename <- function(prefix, extension) {
-  paste0(prefix, "_", file_type, "_year", year_id, "_age", age_group_years_start, extension)
-}
-
 
 ##----------------------------------------------------------------
 ## 2. Convert key variables to factors for modeling purposes
 ##----------------------------------------------------------------
-# colnames(df)
-# str(df)
 # --- Assign explicit factor variable for toc ---
 toc_levels <- c("AM", "ED", "HH", "IP", "NF", "RX")  # add RX if it's a possible toc
 
@@ -137,7 +135,6 @@ df_bins_master <- df %>%
   mutate(prop_bin = row_count / sum(row_count, na.rm = TRUE)) %>%
   ungroup()
 
-
 grid_input_master <- df_bins_master %>%
   distinct(acause_lvl2, race_cd, sex_id, age_group_years_start, toc_fact) %>%
   crossing(
@@ -146,12 +143,9 @@ grid_input_master <- df_bins_master %>%
   ) %>%
   left_join(df_bins_master, by = c("acause_lvl2", "race_cd", "sex_id", "age_group_years_start", "toc_fact"))
 
-
 ##----------------------------------------------------------------
 ## 4. BOOTSTRAP
 ##----------------------------------------------------------------
-boot_chunks_folder <- file.path(two_part_stats_folder, "boot_chunks", generate_filename("boot", ""))
-dir.create(boot_chunks_folder, showWarnings = FALSE, recursive = TRUE)
 
 # Dynamically set bootstrap iteration number based on filetype 
 if (file_type == "RX") {
@@ -238,7 +232,7 @@ for (b in seq_len(B)) {
   )]
   
   # Write output for this iteration
-  boot_out_path <- file.path(boot_chunks_folder, sprintf("bootstrap_iter_%03d.parquet", b))
+  boot_out_path <- file.path(bootstrap_chunks_output_folder, sprintf("bootstrap_iter_%03d.parquet", b))
   write_parquet(out_b, boot_out_path)
   cat("Written:", boot_out_path, "\n")
   
@@ -247,8 +241,12 @@ for (b in seq_len(B)) {
   gc(verbose = FALSE)
 }
 
+##----------------------------------------------------------------
+## 5. Create Bootstrap Summary Output
+##----------------------------------------------------------------
+
 # Combine all bootstrap iterations
-boot_combined <- open_dataset(boot_chunks_folder) %>% collect()
+boot_combined <- open_dataset(bootstrap_chunks_output_folder) %>% collect()
 
 # Create bootstrap bin summary
 df_bins_summary <- df_bins_master %>%
@@ -330,7 +328,7 @@ df_summary <- df_summary %>%
     year_id = year_id,
     file_type = file_type,
     # Aggregate toc label
-    toc = ifelse(race_cd == "all_race", paste0("all_toc_", age_group_years_start), as.character(toc_fact)), # Issue here - "all_toc", I understand for F2T this combines all the available TOC in the F2T dataset, but it doesn't include RX, and when we process RX data it only includes RX, so there won't be a way to differentiate between F2T "all_toc" and RX "all_toc" data when this runs
+    toc = ifelse(race_cd == "all_race", paste0("all_toc_", age_group_years_start), as.character(toc_fact)), # Consider changing to better differentiate between F2T and RX
     # Aggregate race label
     race_cd = ifelse(race_cd == "all_race", paste0("all_race_", age_group_years_start), race_cd)
   )
@@ -384,8 +382,12 @@ desired_order <- c(
 )
 df_summary <- df_summary[, desired_order]
 
+##----------------------------------------------------------------
+## 6. Save to CSV
+##----------------------------------------------------------------
+
 # Write to CSV
 file_out <- generate_filename("bootstrap_marginal_results", ".csv")
-out_path <- file.path(two_part_stats_folder, file_out)
+out_path <- file.path(bootstrap_results_output_folder, file_out)
 write.csv(df_summary, out_path, row.names = FALSE)
 cat("Wrote final CSV to:", out_path, "\n")
