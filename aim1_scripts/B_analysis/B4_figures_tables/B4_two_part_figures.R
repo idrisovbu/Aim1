@@ -1,5 +1,5 @@
 ######################################
-# Title: B3_generate_plots.R
+# Title: B4_two_part_model_figures.R
 # Description: Generates plots from the master table .csv file (weighted_summary_two_part_table_master.csv) & from subtable csv files
 #
 # Inputs: weighted_summary_two_part_table_master.csv, subtable_by_age/cause/cause_lvl2/cause_year/race/toc/year.csv
