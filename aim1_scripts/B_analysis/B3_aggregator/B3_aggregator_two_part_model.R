@@ -13,6 +13,9 @@
 ##'  4. Merges summary tables into a final structured output.
 ##'  5. Saves results to a dynamically created output directory.
 ##'
+##' Outputs: /mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/05.Aggregation_Summary/<date>/aggregation_results/weighted_summary_two_part_table_master.csv
+##'          /mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/05.Aggregation_Summary/<date>/aggregation_results/two_part_table.csv
+##'          /mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/05.Aggregation_Summary/<date>/aggregation_subtable_results/subtable_by_<type>.csv
 ##'
 ##' Author: Bulat Idrisov
 ##----------------------------------------------------------------
@@ -39,25 +42,9 @@ if (Sys.info()["sysname"] == 'Linux'){
   l <- 'L:/'
 }
 
-##########################################
-# Read in all csv files
-##########################################
-#defined manually
-date_of_input <- "20250624"
-base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis"
-
-
-# Define input directory 
-input_two_part <- file.path(base_dir, date_of_input, "04.Two_Part_Estimates") 
-
-# Get the list of all CSV files from the input directory
-files_list <- list.files(input_two_part, pattern = "\\.csv$", full.names = TRUE) 
-
-# Define output directory
-output_folder <- file.path(base_dir, date_of_input, "Agregators")
-dir.create(output_folder, recursive = TRUE, showWarnings = FALSE)
-
-
+##----------------------------------------------------------------
+## 0. Create directory folders 
+##----------------------------------------------------------------
 # Ensure the output directory exists
 ensure_dir_exists <- function(dir_path) {
   if (!dir.exists(dir_path)) {
@@ -65,10 +52,30 @@ ensure_dir_exists <- function(dir_path) {
   }
 }
 
+# Defined manually
+date_of_input <- "bested" # bested from 20250624
+base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis"
 
-##############################
-##############################
-##############################
+# Define input directory 
+input_two_part <- file.path(base_dir, "04.Two_Part_Estimates", date_of_input, "bootstrap_results") 
+
+# Define output directory
+date_of_output <- format(Sys.time(), "%Y%m%d")
+
+output_folder <- file.path(base_dir, "05.Aggregation_Summary", date_of_output, "aggregation_results")
+subtable_output_folder <- file.path(base_dir, "05.Aggregation_Summary", date_of_output, "aggregation_subtable_results")
+
+ensure_dir_exists(output_folder)
+ensure_dir_exists(subtable_output_folder)
+
+
+##----------------------------------------------------------------
+## 1. Read in data
+##----------------------------------------------------------------
+
+# Get the list of all CSV files from the input directory
+files_list <- list.files(input_two_part, pattern = "\\.csv$", full.names = TRUE) 
+
 # Read files
 df_input <- map_dfr(files_list, ~read_csv(.x, show_col_types = FALSE))
 
@@ -77,15 +84,12 @@ output_file <- file.path(output_folder, "two_part_table.csv")
 write_csv(df_input, output_file)
 cat("table saved", output_file, "\n")
 
-
+##----------------------------------------------------------------
+## 2. Summarize results: Compute mean incremental cost per disease and HIV status
+##----------------------------------------------------------------
 
 # Replace zeros with NA to avoid bias in averaging
 df_input[df_input == 0] <- NA
-
-##########################################
-#  Summarize results: Compute mean incremental cost per disease and HIV status
-##########################################
-
 
 # Only keep years found in df_input
 inflation_raw <- data.frame(
@@ -188,18 +192,70 @@ master_table <- master_table %>%
     )
   )
 
-
-
 tabexam <-master_table %>%
   count(acause_lvl2, cause_name_lvl2) %>%
   arrange(acause_lvl2)
 
 
-# Create subset excluding all toc
+# Create subset excluding all toc (master table)
 df_non_all_toc <- master_table %>% filter(!grepl("^all_toc", toc))
+
 write_csv(df_non_all_toc, file.path(output_folder, "weighted_summary_two_part_table_master.csv"))
 
-### See above, I had somethibg similar that was taking over only all_toc but in the two part model somethibg was wrong with creating summares
+##----------------------------------------------------------------
+## 3. Create subtables
+##----------------------------------------------------------------
 
+# Use master table to create subtables
 
+# Columns to *always* include in the grouping
+cause_cols <- c("acause_lvl1", "cause_name_lvl1", "acause_lvl2", "cause_name_lvl2")
+
+# Helper function as before
+weighted_mean_all <- function(df, group_cols, value_cols, weight_col) {
+  df %>%
+    group_by(across(all_of(group_cols))) %>%
+    summarise(across(all_of(value_cols), 
+                     ~ weighted.mean(.x, get(weight_col), na.rm = TRUE),
+                     .names = "{.col}"
+    ),
+    total_bin_count = sum(.data[[weight_col]], na.rm = TRUE),
+    .groups = "drop")
+}
+
+value_cols <- c(
+  "mean_cost","lower_ci","upper_ci",
+  "mean_cost_hiv","lower_ci_hiv","upper_ci_hiv",
+  "mean_cost_sud","lower_ci_sud","upper_ci_sud",
+  "mean_cost_hiv_sud","lower_ci_hiv_sud","upper_ci_hiv_sud",
+  "mean_delta_hiv","lower_ci_delta_hiv","upper_ci_delta_hiv",
+  "mean_delta_sud","lower_ci_delta_sud","upper_ci_delta_sud",
+  "mean_delta_hiv_sud","lower_ci_delta_hiv_sud","upper_ci_delta_hiv_sud"
+)
+
+# By cause (Level 2 + Level 1)
+by_cause <- weighted_mean_all(df_non_all_toc, cause_cols, value_cols, "total_bin_count")
+write_csv(by_cause, file.path(subtable_output_folder, "subtable_by_cause.csv"))
+
+# By year (preserving both cause levels)
+by_year <- weighted_mean_all(df_non_all_toc, c(cause_cols, "year_id"), value_cols, "total_bin_count")
+write_csv(by_year, file.path(subtable_output_folder, "subtable_by_year.csv"))
+
+# By type of care (preserving both cause levels)
+by_toc <- weighted_mean_all(df_non_all_toc, c(cause_cols, "toc"), value_cols, "total_bin_count")
+write_csv(by_toc, file.path(subtable_output_folder, "subtable_by_toc.csv"))
+
+# By race (preserving both cause levels)
+by_race <- weighted_mean_all(df_non_all_toc, c(cause_cols, "race_cd"), value_cols, "total_bin_count")
+write_csv(by_race, file.path(subtable_output_folder, "subtable_by_race.csv"))
+
+# By age group (preserving both cause levels)
+by_age <- weighted_mean_all(df_non_all_toc, c(cause_cols, "age_group_years_start"), value_cols, "total_bin_count")
+write_csv(by_age, file.path(subtable_output_folder, "subtable_by_age.csv"))
+
+# Example: By cause and year (joint stratification, cause levels always present)
+by_cause_year <- weighted_mean_all(df_non_all_toc, c(cause_cols, "year_id"), value_cols, "total_bin_count")
+write_csv(by_cause_year, file.path(subtable_output_folder, "subtable_by_cause_year.csv"))
+
+cat("All subtables (with cause levels preserved) have been saved to CSV in ", subtable_output_folder, "\n")
 
