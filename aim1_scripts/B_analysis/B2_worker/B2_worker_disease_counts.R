@@ -41,9 +41,11 @@ if (Sys.info()["sysname"] == 'Linux'){
 
 if (interactive()) {
   path <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/bested/aggregated_by_year/compiled_F2T_data_2019_age80.parquet"
-  df_input <- read_parquet(path) %>% as.data.table() %>% sample(10000, replace = TRUE)
+  df_input <- open_dataset(path) %>% head(500000) %>% collect() %>% as.data.table() %>% sample_n(10000, replace = TRUE)
   year_id <- 2019
   file_type <- "F2T"
+  age_group_years_start <- df_input$age_group_years_start[1]
+  
 } else {
   # Read job args from SUBMIT_ARRAY_JOB
   args <- commandArgs(trailingOnly = TRUE)
@@ -62,10 +64,27 @@ if (interactive()) {
   
   # Load data (can switch to open_dataset() if needed)
   df_input <- read_parquet(fp_input) %>% as.data.table()
+  age_group_years_start <- df_input$age_group_years_start[1]
 }
 
 ##----------------------------------------------------------------
-## 0. Create output folders
+## 0.1. Functions
+##----------------------------------------------------------------
+
+# Utility function to create directories recursively if not already present
+ensure_dir_exists <- function(dir_path) {
+  if (!dir.exists(dir_path)) {
+    dir.create(dir_path, recursive = TRUE)
+  }
+}
+
+# Function to generate output filenames based on file type and year
+generate_filename <- function(prefix, extension) {
+  paste0(prefix, "_", file_type, "_year", year_id, "_age", age_group_years_start, extension)
+}
+
+##----------------------------------------------------------------
+## 1. Create output folders
 ##----------------------------------------------------------------
 
 # Define base output directory
@@ -77,32 +96,20 @@ summary_stats_folder <- file.path(base_output_dir, "01.Summary_Statistics/", dat
 regression_estimates_folder <- file.path(base_output_dir, "02.Regression_Estimates/", date_folder)
 meta_stats_folder <- file.path(base_output_dir, "03.Meta_Statistics/", date_folder)
 
-# Utility function to create directories recursively if not already present
-ensure_dir_exists <- function(dir_path) {
-  if (!dir.exists(dir_path)) {
-    dir.create(dir_path, recursive = TRUE)
-  }
-}
+# Define log folder
+log_folder <- file.path(base_output_dir, "logs")
 
 # Create all necessary directories
 ensure_dir_exists(summary_stats_folder)
 ensure_dir_exists(regression_estimates_folder)
 ensure_dir_exists(meta_stats_folder)
-
-# Create logs subfolder inside summary stats
-log_folder <- file.path(base_output_dir, "logs")
 ensure_dir_exists(log_folder)
 
-# Construct log file path (optional)
+# Construct log file path
 task_id <- as.integer(Sys.getenv("SLURM_ARRAY_TASK_ID"))
 if (is.na(task_id)) task_id <- "interactive"
 timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
 log_file <- file.path(log_folder, paste0("error_log_", task_id, "_", timestamp, ".txt"))
-
-# Function to generate output filenames based on file type and year
-generate_filename <- function(prefix, extension) {
-  paste0(prefix, "_", file_type, "_year", year_id, extension)
-}
 
 ##----------------------------------------------------------------
 ## 1. Metadata summary
@@ -123,15 +130,13 @@ meta_stats_2019 <- df_input[, .(
 # Save metadata
 file_out_meta <- generate_filename("summary_meta", ".csv")
 out_path_meta <- file.path(meta_stats_folder, file_out_meta)
-fwrite(meta_stats, out_path_meta)
+fwrite(meta_stats_2019, out_path_meta)
 
 cat("Meta statistics saved to:", out_path_meta, "\n")
-
 
 ##----------------------------------------------------------------
 ## 2. Summary statistics by disease group
 ##----------------------------------------------------------------
-# 
 
 # Cross-tab: count of beneficiaries per group
 cross_tab_dt <- df_input[, .(n_benes_per_group = .N),
@@ -180,149 +185,105 @@ fwrite(summary_dt, out_path_summary)
 cat("Summary statistics saved to:", out_path_summary, "\n")
 
 ##----------------------------------------------------------------
-## Run logistic and gamma regressions
+## 3. Run logistic and gamma regressions
 ##----------------------------------------------------------------
-# unique(df_input$toc)
+
+# Ensure factor levels are established
+toc_levels <- c("AM", "ED", "HH", "IP", "NF", "RX")
+
+df_input[, `:=`(
+  acause_lvl2   = factor(acause_lvl2),
+  race_cd       = factor(race_cd),
+  sex_id        = factor(sex_id),
+  toc_fact      = factor(as.character(toc), levels = toc_levels),         
+  has_hiv       = factor(has_hiv, levels = c(0, 1)),
+  has_sud       = factor(has_sud, levels = c(0, 1)),
+  has_hepc      = factor(has_hepc, levels = c(0, 1)),
+  has_cost      = factor(has_cost, levels = c(0, 1))
+)]
+
+# Skip iterations with low factor level diversity
+if (nlevels(droplevels(df_input$has_hiv)) < 2 ||
+    nlevels(droplevels(df_input$has_sud)) < 2 ||
+    nlevels(droplevels(df_input$acause_lvl2)) < 2) {
+  cat("Error - ", b, "- insufficient factor diversity\n")
+  stop("Insufficient factor levels in dataset! Issue caused by has_hiv, has_sud, or acause_lvl2 having less than 2 factor levels")
+}
+
+#### Set regression formulas
+# Logistic model (toc_fact removed for RX)
+mod_logit <- if (file_type == "RX") {
+  glm(has_cost ~ acause_lvl2 * has_hiv + acause_lvl2 * has_sud + race_cd + sex_id,
+      data = df_input, family = binomial(link = "logit"))
+} else {
+  glm(has_cost ~ acause_lvl2 * has_hiv + acause_lvl2 * has_sud + race_cd + sex_id + toc_fact,
+      data = df_input, family = binomial(link = "logit"))
+}
+
+# Gamma input
+df_gamma_input <- df_input[tot_pay_amt > 0]
+df_gamma_input[, tot_pay_amt := pmin(tot_pay_amt, quantile(tot_pay_amt, 0.995, na.rm = TRUE))]
+
+# Gamma model (toc_fact removed for RX)
+mod_gamma <- if (file_type == "RX") {
+  glm(tot_pay_amt ~ acause_lvl2 * has_hiv + acause_lvl2 * has_sud + race_cd + sex_id,
+      data = df_gamma_input, family = Gamma(link = "log"), control = glm.control(maxit = 100))
+} else {
+  glm(tot_pay_amt ~ acause_lvl2 * has_hiv + acause_lvl2 * has_sud + race_cd + sex_id + toc_fact,
+      data = df_gamma_input, family = Gamma(link = "log"), control = glm.control(maxit = 100))
+}
+
+######## Need consult to resolve how regression_summary should look ######## 
+# # Create prediction grid with metadata
+# prediction_grid <- df_input %>%
+#   distinct(acause_lvl2, race_cd, sex_id, age_group_years_start, toc_fact) %>%
+#   crossing(has_hiv = factor(c(0, 1), levels = levels(df_input$has_hiv))) %>%
+#   crossing(has_sud = factor(c(0, 1), levels = levels(df_input$has_sud)))
 # 
-# # Ensure df_input is a tibble
-# df_input <- as_tibble(df_input)
+# # Predict expected cost
+# prediction_grid <- prediction_grid %>%
+#   mutate(
+#     prob_has_cost = predict(mod_logit, newdata = ., type = "response"),
+#     cost_if_pos   = predict(mod_gamma, newdata = ., type = "response"),
+#     exp_cost      = prob_has_cost * cost_if_pos
+#   )
 # 
-# # Set interaction formula explicitly
-# logit_formula <- has_cost ~ acause * has_hiv + race_cd + sex_id
-# gamma_formula <- tot_pay_amt ~ acause * has_hiv + race_cd + sex_id
-# 
-# # Fit logit model
-# mod_logit <- glm(
-#   formula = logit_formula,
-#   data = df_input,
-#   family = binomial(link = "logit")
+# # Summarize predictions # Is this how the table should look? Not sure
+# regression_summary <- prediction_grid %>%
+#   group_by(acause_lvl2, race_cd, age_group_years_start, toc_fact, has_hiv, has_sud) %>%
+#   summarise(predicted_cost = mean(exp_cost), .groups = "drop") %>%
+# pivot_wider(
+#   id_cols = c(acause_lvl2, race_cd, age_group_years_start, toc_fact),
+#   names_from = c(has_hiv, has_sud),
+#   values_from = predicted_cost,
+#   names_glue = "cost_hiv{has_hiv}_sud{has_sud}"
 # )
 # 
-# # Prepare positive-cost subset with outlier capping
-# df_positive_cost <- df_input %>%
-#   filter(tot_pay_amt > 0) %>%
-#   mutate(
-#     tot_pay_amt = pmin(tot_pay_amt, quantile(tot_pay_amt, 0.995, na.rm = TRUE))
+# # Old code below
+# regression_summary <- prediction_grid %>%
+#   group_by(acause_lvl2, race_cd, age_group_years_start, toc_fact, has_hiv, has_sud) %>%
+#   summarise(predicted_cost = mean(exp_cost), .groups = "drop") %>%
+#   pivot_wider(
+#     names_from = c(has_hiv, has_sud),
+#     values_from = predicted_cost,
+#     names_prefix = c("cost_hiv_", "cost_sud_")
 #   ) %>%
-#   droplevels()
-# 
-# # Fit gamma model
-# mod_gamma <- glm(
-#   formula = gamma_formula,
-#   data = df_positive_cost,
-#   family = Gamma(link = "log"),
-#   control = glm.control(maxit = 100)
-# )
-# 
-# # Extract coefficients and p-values using broom
-# extract_all_coefs <- function(model, suffix) {
-#   tidy(model) %>%
-#     filter(term != "(Intercept)") %>%
-#     rename(
-#       variable = term,
-#       !!paste0("estimate_", suffix) := estimate,
-#       !!paste0("p_", suffix) := p.value
-#     ) %>%
-#     select(variable, starts_with("estimate_"), starts_with("p_"))
-# }
-# 
-# logit_df <- extract_all_coefs(mod_logit, "logit")
-# gamma_df <- extract_all_coefs(mod_gamma, "gamma")
-# 
-# # Merge and annotate
-# regression_results <- full_join(logit_df, gamma_df, by = "variable") %>%
 #   mutate(
-#     interaction_dropped = if_else(
-#       is.na(estimate_gamma) & str_detect(variable, ":"), TRUE, FALSE
-#     ),
+#     cost_hiv_delta = cost_hiv_1 - cost_hiv_0,
 #     year_id = year_id,
 #     file_type = file_type
-#   ) %>%
-#   select(variable, estimate_logit, p_logit, estimate_gamma, p_gamma,
-#          interaction_dropped, year_id, file_type)
+#   )
 # 
-# # Save regression results
-# file_out_regression <- generate_filename("regression_results", ".csv")
-# out_path_regression <- file.path(regression_estimates_folder, file_out_regression)
-# write_csv(regression_results, out_path_regression)
-# cat("✅ Regression results saved to:", out_path_regression, "\n")
-# 
-# # Save full model summaries
-# save_model_summary <- function(model, model_name, folder) {
-#   fname <- generate_filename(paste0("full_model_summary_", model_name), ".txt")
-#   fpath <- file.path(folder, fname)
-#   writeLines(capture.output(summary(model)), fpath)
-#   cat("Saved full model summary to:", fpath, "\n")
-# }
-# 
-# save_model_summary(mod_logit, "logit", regression_estimates_folder)
-# save_model_summary(mod_gamma, "gamma", regression_estimates_folder)
-# 
-# message("Job ended at: ", Sys.time())
+# # Save regression summary table
+# file_out_summary <- generate_filename("regression_summary_estimates", ".csv")
+# out_path_summary <- file.path(regression_estimates_folder, file_out_summary)
+# write_csv(regression_summary, out_path_summary)
+# cat("✅ Summary predictions saved to:", out_path_summary, "\n")
 
 
-### Us this below 
-
-# Ensure df_input is a tibble
-df_input <- as_tibble(df_input)
-
-# Set regression formulas
-logit_formula <- has_cost ~ acause_lvl2 * has_hiv + race_cd + sex_id
-gamma_formula <- tot_pay_amt ~ acause_lvl2 * has_hiv + race_cd + sex_id
-
-# Fit logistic model
-mod_logit <- glm(
-  formula = logit_formula,
-  data = df_input,
-  family = binomial(link = "logit")
-)
-
-# Cap outliers and fit gamma model
-df_positive_cost <- df_input %>%
-  filter(tot_pay_amt > 0) %>%
-  mutate(tot_pay_amt = pmin(tot_pay_amt, quantile(tot_pay_amt, 0.995, na.rm = TRUE))) %>%
-  droplevels()
-
-mod_gamma <- glm(
-  formula = gamma_formula,
-  data = df_positive_cost,
-  family = Gamma(link = "log"),
-  control = glm.control(maxit = 100)
-)
-
-# Create prediction grid with metadata
-prediction_grid <- df_input %>%
-  distinct(acause_lvl2, race_cd, sex_id, age_group_years_start, toc) %>%
-  crossing(has_hiv = factor(c(0, 1), levels = levels(df_input$has_hiv)))
-
-# Predict expected cost
-prediction_grid <- prediction_grid %>%
-  mutate(
-    prob_has_cost = predict(mod_logit, newdata = ., type = "response"),
-    cost_if_pos   = predict(mod_gamma, newdata = ., type = "response"),
-    exp_cost      = prob_has_cost * cost_if_pos
-  )
-
-# Summarize predictions
-regression_summary <- prediction_grid %>%
-  group_by(acause_lvl2, race_cd, age_group_years_start, toc, has_hiv) %>%
-  summarise(predicted_cost = mean(exp_cost), .groups = "drop") %>%
-  pivot_wider(
-    names_from = has_hiv,
-    values_from = predicted_cost,
-    names_prefix = "cost_hiv_"
-  ) %>%
-  mutate(
-    cost_delta = cost_hiv_1 - cost_hiv_0,
-    year_id = year_id,
-    file_type = file_type
-  )
-
-# Save regression summary table
-file_out_summary <- generate_filename("regression_summary_estimates", ".csv")
-out_path_summary <- file.path(regression_estimates_folder, file_out_summary)
-write_csv(regression_summary, out_path_summary)
-cat("✅ Summary predictions saved to:", out_path_summary, "\n")
+##----------------------------------------------------------------
+## 4. Save regression coefficients
+##----------------------------------------------------------------
 
 # Extract coefficients and p-values
 extract_all_coefs <- function(model, suffix) {
@@ -344,16 +305,21 @@ regression_results <- full_join(logit_df, gamma_df, by = "variable") %>%
   mutate(
     interaction_dropped = if_else(is.na(estimate_gamma) & str_detect(variable, ":"), TRUE, FALSE),
     year_id = year_id,
-    file_type = file_type
+    file_type = file_type,
+    age_group_years_start = age_group_years_start
   ) %>%
   select(variable, estimate_logit, p_logit, estimate_gamma, p_gamma,
-         interaction_dropped, year_id, file_type)
+         interaction_dropped, year_id, file_type, age_group_years_start)
 
 # Save regression coefficients
 file_out_regression <- generate_filename("regression_results", ".csv")
 out_path_regression <- file.path(regression_estimates_folder, file_out_regression)
 write_csv(regression_results, out_path_regression)
 cat("✅ Regression coefficients saved to:", out_path_regression, "\n")
+
+##----------------------------------------------------------------
+## 4. Save Full Model Summaries
+##----------------------------------------------------------------
 
 # Save full model summaries
 save_model_summary <- function(model, model_name, folder) {
@@ -367,4 +333,3 @@ save_model_summary(mod_logit, "logit", regression_estimates_folder)
 save_model_summary(mod_gamma, "gamma", regression_estimates_folder)
 
 message("Job ended at: ", Sys.time())
-
