@@ -1,11 +1,12 @@
 ##----------------------------------------------------------------
 ##' Title: B2_worker_disease_counts.R
-##'
+##' Description: Creates summary statistics and summary model outputs
 ##' Author:      Bulat Idrisov
 ##' Date:        2025-05-04
+##' Outputs: /mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/01.Summary_Statistics/<date>
+##'          /mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/02.Regression_Estimates/<date>
+##'          /mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/03.Meta_Statistics/<date>
 ##' ----------------------------------------------------------------
-
-
 
 rm(list = ls())
 pacman::p_load(
@@ -34,13 +35,15 @@ if (Sys.info()["sysname"] == 'Linux'){
   l <- 'L:/'
 }
 
+##----------------------------------------------------------------
+# 0. Read in data from SLURM job submission
+##----------------------------------------------------------------
 
 if (interactive()) {
-  path <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/20250609/aggregated_by_year/compiled_F2T_data_2019.parquet"
-  df <- read_parquet(path)
-  df_input <- as.data.table(df)  
-  year_id <- 2010
-  file_type <- "FT"
+  path <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/bested/aggregated_by_year/compiled_F2T_data_2019_age80.parquet"
+  df_input <- read_parquet(path) %>% as.data.table() %>% sample(10000, replace = TRUE)
+  year_id <- 2019
+  file_type <- "F2T"
 } else {
   # Read job args from SUBMIT_ARRAY_JOB
   args <- commandArgs(trailingOnly = TRUE)
@@ -61,23 +64,18 @@ if (interactive()) {
   df_input <- read_parquet(fp_input) %>% as.data.table()
 }
 
-
-
 ##----------------------------------------------------------------
 ## 0. Create output folders
 ##----------------------------------------------------------------
-# colnames(df)
-# colnames(df_FT)
 
 # Define base output directory
 base_output_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis"
 date_folder <- format(Sys.time(), "%Y%m%d")
-output_folder <- file.path(base_output_dir, date_folder)
 
 # Define subfolders for output types
-summary_stats_folder <- file.path(output_folder, "01.Summary_Statistics")
-regression_estimates_folder <- file.path(output_folder, "02.Regression_Estimates")
-meta_stats_folder <- file.path(output_folder, "03.Meta_Statistics")
+summary_stats_folder <- file.path(base_output_dir, "01.Summary_Statistics/", date_folder)
+regression_estimates_folder <- file.path(base_output_dir, "02.Regression_Estimates/", date_folder)
+meta_stats_folder <- file.path(base_output_dir, "03.Meta_Statistics/", date_folder)
 
 # Utility function to create directories recursively if not already present
 ensure_dir_exists <- function(dir_path) {
@@ -87,13 +85,12 @@ ensure_dir_exists <- function(dir_path) {
 }
 
 # Create all necessary directories
-ensure_dir_exists(output_folder)
 ensure_dir_exists(summary_stats_folder)
 ensure_dir_exists(regression_estimates_folder)
 ensure_dir_exists(meta_stats_folder)
 
 # Create logs subfolder inside summary stats
-log_folder <- file.path(summary_stats_folder, "logs")
+log_folder <- file.path(base_output_dir, "logs")
 ensure_dir_exists(log_folder)
 
 # Construct log file path (optional)
