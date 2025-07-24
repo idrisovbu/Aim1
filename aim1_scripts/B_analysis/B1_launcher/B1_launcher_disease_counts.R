@@ -9,7 +9,6 @@
 ##' Date: 
 ##----------------------------------------------------------------
 
-
 # # Clear environment and set library paths
 rm(list = ls())
 
@@ -36,7 +35,7 @@ if (Sys.info()["sysname"] == 'Linux'){
 
 
 # Input location (adjust date as needed based on the run date)
-run_date <- "20250518"
+run_date <- "bested" # bested was 20250620 (update as needed)
 fp_input_data <- file.path(l, "LU_CMS/DEX/hivsud/aim1/A_data_preparation", run_date, "aggregated_by_year")
 
 # List all .parquet files
@@ -46,21 +45,21 @@ input_files <- list.files(fp_input_data, pattern = "\\.parquet$", full.names = T
 df_params <- data.frame(directory = input_files) %>%
   mutate(
     file_type = ifelse(grepl("F2T", basename(directory)), "F2T", "RX"),
-    year_id = as.numeric(sub(".*_(\\d{4})\\.parquet$", "\\1", basename(directory)))
-  ) %>%
-  filter(!is.na(year_id))%>%
+    year_id = as.numeric(sub(".*_(\\d{4})_age\\d+\\.parquet$", "\\1", basename(directory)))
+    ) %>%   
+  filter(!is.na(year_id)) %>%
   filter(!(year_id %in% c(2002, 2004, 2006))) 
 
 # Write CSV for full job param list
 param_dir <- file.path(l, "LU_CMS/DEX/hivsud/aim1/resources_aim1/")
 dir.create(param_dir, recursive = TRUE, showWarnings = FALSE)
-fp_parameters <- file.path(param_dir, "by_year_parameters_aim1.csv")
+fp_parameters <- file.path(param_dir, "disease_counts_parameters_aim1.csv")
 fwrite(df_params, fp_parameters)
 
 # Define script and output paths
 user <- Sys.info()[["user"]]
 script_path <- file.path(h, "repo/dex_us_county/misc/hivsud/aim1_scripts/B_analysis/B2_worker/B2_worker_disease_counts.R")
-log_dir <- file.path(l, "LU_CMS/DEX/hivsud/aim1/B_analysis/logs_", user)
+log_dir <- file.path(l, "LU_CMS/DEX/hivsud/aim1/B_analysis/logs")
 dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
 
 # Submit jobs
@@ -78,5 +77,5 @@ jid <- SUBMIT_ARRAY_JOB(
   ## long.q is 384H (2 weeks) if its under 72 then do all.q #https://docs.cluster.ihme.washington.edu/#hpc-execution-host-hardware-specifications
   user_email = paste0(user, "@uw.edu"),
   archive = FALSE,
-  test = F  # <-- Change to FALSE when running live
+  test = T  # <-- Change to FALSE when running live
 )
