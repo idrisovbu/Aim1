@@ -1,32 +1,54 @@
-#B3descriptive_twoPart.R
+##----------------------------------------------------------------
+##' Title: B3_two_part_table_and_figures.R
+##'
+##' Purpose:
+##'
+##' Outputs: TBD
+##'
+##' Author: Bulat Idrisov
+##----------------------------------------------------------------
 
-
-
+# Environment setup
 rm(list = ls())
 pacman::p_load(ggsci,dplyr, openxlsx, RMySQL,data.table, ini, DBI, tidyr, readr,writexl, purrr, ggplot2, gridExtra, scales, ggpubr, patchwork, RColorBrewer)
+library(lbd.loader, lib.loc = sprintf("/share/geospatial/code/geospatial-libraries/lbd.loader-%s", R.version$major))
+if("dex.dbr"%in% (.packages())) detach("package:dex.dbr", unload=TRUE)
+library(dex.dbr, lib.loc = lbd.loader::pkg_loc("dex.dbr"))
+suppressMessages(lbd.loader::load.containing.package())
 
-
+# Set drive paths
+if (Sys.info()["sysname"] == 'Linux'){
+  j <- "/home/j/"
+  h <- paste0("/ihme/homes/",Sys.info()[7],"/")
+  l <- '/ihme/limited_use/'
+} else if (Sys.info()["sysname"] == 'Darwin'){
+  j <- "/Volumes/snfs"
+  h <- paste0("/Volumes/",Sys.info()[7],"/")
+  l <- '/Volumes/limited_use'
+} else {
+  j <- "J:/"
+  h <- "H:/"
+  l <- 'L:/'
+}
 
 #######
 # Base analysis directory
-base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis"
+base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/05.Aggregation_Summary"
 
 # Use  date 
-date_of_input <- "20250624"
+date_of_input <- "bested"
 
 # Construct path to Agregators folder
-agregators_folder <- file.path(base_dir, date_of_input, "Agregators")
+aggregation_results_folder <- file.path(base_dir, date_of_input, "aggregation_results")
 
-# Read input files from Agregators folder
-two_part_by_toc <- fread(file.path(agregators_folder, "weighted_summary_two_part_table_master.csv"))
+# Read input files from aggregation_results folder
+two_part_by_toc <- fread(file.path(aggregation_results_folder, "weighted_summary_two_part_table_master.csv"))
 
 # Create output folder for tables and figures
 output_folder <- file.path(base_dir, date_of_input, "tablesandfigures")
 if (!dir.exists(output_folder)) {
   dir.create(output_folder, recursive = TRUE)
 }
-
-#####
 
 #function to save plots
 save_plot <- function(plot_obj, filename) {
@@ -37,67 +59,9 @@ save_plot <- function(plot_obj, filename) {
 
 jama_palette <- pal_jama("default")(7)
 
-
-######Use master table to create subtables
-
-# Columns to *always* include in the grouping
-cause_cols <- c("acause_lvl1", "cause_name_lvl1", "acause_lvl2", "cause_name_lvl2")
-
-# Helper function as before
-weighted_mean_all <- function(df, group_cols, value_cols, weight_col) {
-  df %>%
-    group_by(across(all_of(group_cols))) %>%
-    summarise(across(all_of(value_cols), 
-                     ~ weighted.mean(.x, get(weight_col), na.rm = TRUE),
-                     .names = "{.col}"
-    ),
-    total_bin_count = sum(.data[[weight_col]], na.rm = TRUE),
-    .groups = "drop")
-}
-
-value_cols <- c(
-  "mean_cost","lower_ci","upper_ci",
-  "mean_cost_hiv","lower_ci_hiv","upper_ci_hiv",
-  "mean_cost_sud","lower_ci_sud","upper_ci_sud",
-  "mean_cost_hiv_sud","lower_ci_hiv_sud","upper_ci_hiv_sud",
-  "mean_delta_hiv","lower_ci_delta_hiv","upper_ci_delta_hiv",
-  "mean_delta_sud","lower_ci_delta_sud","upper_ci_delta_sud",
-  "mean_delta_hiv_sud","lower_ci_delta_hiv_sud","upper_ci_delta_hiv_sud"
-)
-
-# By cause (Level 2 + Level 1)
-by_cause <- weighted_mean_all(two_part_by_toc, cause_cols, value_cols, "total_bin_count")
-write_csv(by_cause, file.path(output_folder, "subtable_by_cause.csv"))
-
-# By year (preserving both cause levels)
-by_year <- weighted_mean_all(two_part_by_toc, c(cause_cols, "year_id"), value_cols, "total_bin_count")
-write_csv(by_year, file.path(output_folder, "subtable_by_year.csv"))
-
-# By type of care (preserving both cause levels)
-by_toc <- weighted_mean_all(two_part_by_toc, c(cause_cols, "toc"), value_cols, "total_bin_count")
-write_csv(by_toc, file.path(output_folder, "subtable_by_toc.csv"))
-
-# By race (preserving both cause levels)
-by_race <- weighted_mean_all(two_part_by_toc, c(cause_cols, "race_cd"), value_cols, "total_bin_count")
-write_csv(by_race, file.path(output_folder, "subtable_by_race.csv"))
-
-# By age group (preserving both cause levels)
-by_age <- weighted_mean_all(two_part_by_toc, c(cause_cols, "age_group_years_start"), value_cols, "total_bin_count")
-write_csv(by_age, file.path(output_folder, "subtable_by_age.csv"))
-
-# Example: By cause and year (joint stratification, cause levels always present)
-by_cause_year <- weighted_mean_all(two_part_by_toc, c(cause_cols, "year_id"), value_cols, "total_bin_count")
-write_csv(by_cause_year, file.path(output_folder, "subtable_by_cause_year.csv"))
-
-cat("All subtables (with cause levels preserved) have been saved to CSV in ", output_folder, "\n")
-
-######
-# BELOW IS AN OLD CODE THAT NEEDS TO BE REWRITTEN 
-#
-########
-
-
-
+################################################
+# BELOW IS OLD CODE THAT NEEDS TO BE REWRITTEN (doesn't function atm)
+################################################
 
 # Summary Table 1 - by Level 2 and Level 1 causes
 summary_lvl2 <- two_part_all_toc %>%
