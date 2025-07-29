@@ -132,20 +132,33 @@ df[, `:=`(
 ## 3. Build bin distribution from the full data, used in bootstrapping
 ##----------------------------------------------------------------
 
+# newcode code
+
 df_bins_master <- df %>%
+  group_by(acause_lvl2, race_cd, sex_id, age_group_years_start, toc_fact, has_hiv, has_sud) %>%
+  summarise(row_count = n(), .groups = "drop") %>%
   group_by(acause_lvl2, race_cd, sex_id, age_group_years_start, toc_fact) %>%
-  summarise(row_count = n(), .groups="drop") %>%
-  group_by(acause_lvl2, race_cd, age_group_years_start, toc_fact) %>%
   mutate(prop_bin = row_count / sum(row_count, na.rm = TRUE)) %>%
   ungroup()
 
-grid_input_master <- df_bins_master %>%
-  distinct(acause_lvl2, race_cd, sex_id, age_group_years_start, toc_fact) %>%
-  crossing(
-    has_hiv = factor(c(0, 1), levels = levels(df$has_hiv)),
-    has_sud = factor(c(0, 1), levels = levels(df$has_sud))
-  ) %>%
-  left_join(df_bins_master, by = c("acause_lvl2", "race_cd", "sex_id", "age_group_years_start", "toc_fact"))
+# Now crossing is not needed, you just use the real bins:
+grid_input_master <- df_bins_master
+
+### below can be deleted
+# df_bins_master <- df %>%
+#   group_by(acause_lvl2, race_cd, sex_id, age_group_years_start, toc_fact) %>%
+#   summarise(row_count = n(), .groups="drop") %>%
+#   group_by(acause_lvl2, race_cd, age_group_years_start, toc_fact) %>%
+#   mutate(prop_bin = row_count / sum(row_count, na.rm = TRUE)) %>%
+#   ungroup()
+# 
+# grid_input_master <- df_bins_master %>%
+#   distinct(acause_lvl2, race_cd, sex_id, age_group_years_start, toc_fact) %>%
+#   crossing(
+#     has_hiv = factor(c(0, 1), levels = levels(df$has_hiv)),
+#     has_sud = factor(c(0, 1), levels = levels(df$has_sud))
+#   ) %>%
+#   left_join(df_bins_master, by = c("acause_lvl2", "race_cd", "sex_id", "age_group_years_start", "toc_fact"))
 
 
 table(df$has_hiv, df$has_sud)
