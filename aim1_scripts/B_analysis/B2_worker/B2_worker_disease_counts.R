@@ -202,6 +202,26 @@ df_input[, `:=`(
   has_cost      = factor(has_cost, levels = c(0, 1))
 )]
 
+##----------------------------------------------------------------
+## Check diversity of toc levels (write to log only)
+##----------------------------------------------------------------
+
+valid_toc_levels <- df_input[, unique(na.omit(as.character(toc)))]
+n_unique_toc <- length(valid_toc_levels)
+
+if (n_unique_toc < 2) {
+  msg <- paste0(
+    "❌ REGRESSION HALTED\n",
+    "Reason: Less than 2 levels of toc present\n",
+    "Year: ", year_id, " | Age group: ", age_group_years_start, "\n",
+    "Available toc levels: ", paste(valid_toc_levels, collapse = ", "), "\n",
+    "Timestamp: ", Sys.time(), "\n"
+  )
+  writeLines(msg, con = log_file)
+  stop("Insufficient toc variation for regression (see log).")
+}
+
+
 # Skip iterations with low factor level diversity
 if (nlevels(droplevels(df_input$has_hiv)) < 2 ||
     nlevels(droplevels(df_input$has_sud)) < 2 ||
