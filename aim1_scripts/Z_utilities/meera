@@ -1,0 +1,67 @@
+#Below is Meera's MDCR script
+
+.libPaths( c( "/ihme/dex/us_county/r_library" , .libPaths() ) )
+pacman::p_load(data.table, arrow, dplyr, tidyverse, progress)
+
+# Get counts of observations for RE paper w/o NF or DV so use post-causemap
+run_id <- 81
+# Cause map output dir
+MDCR =      paste0("/mnt/share/limited_use/LU_CMS/DEX/01_pipeline/MDCR/run_",run_id,"/CAUSEMAP/data/")
+MDCD =      paste0("/mnt/share/limited_use/LU_CMS/DEX/01_pipeline/MDCD/run_",run_id,"/CAUSEMAP/data/")
+KYTHERA =   paste0("/mnt/share/limited_use/IDENT/PROJECT_FOLDERS/USA/KYTHERA/dex/01_pipeline/run_",run_id,"/CAUSEMAP/data/")
+NIS =       paste0("/mnt/share/limited_use/LIMITED_USE/PROJECT_FOLDERS/USA/HCUP_NIS/dex/01_pipeline/run_",run_id,"/CAUSEMAP/data/" )
+NEDS =      paste0("/mnt/share/limited_use/LIMITED_USE/PROJECT_FOLDERS/USA/HCUP_NEDS/dex/01_pipeline/run_",run_id,"/CAUSEMAP/data/") 
+SIDS =      paste0("/mnt/share/limited_use/LIMITED_USE/PROJECT_FOLDERS/USA/HCUP_SIDS/dex/01_pipeline/run_",run_id,"/CAUSEMAP/data/") 
+SEDD =      paste0("/mnt/share/limited_use/LIMITED_USE/PROJECT_FOLDERS/USA/HCUP_SEDD/dex/01_pipeline/run_",run_id,"/CAUSEMAP/data/") 
+CHIA_MDCR = paste0("/mnt/share/limited_use/LU_CMS/DEX/01_pipeline/CHIA_MDCR/run_",run_id,"/CAUSEMAP/data/")
+MEPS =      paste0("/mnt/share/dex/us_county/00_data_prep/data/MEPS/stage_3/")
+
+tocs <- c('HH','AM', 'ED', 'IP')
+df1 <- data.frame()
+for (toc1 in tocs) {
+  print(toc1)
+  df <- open_dataset(paste0(MDCD, '/toc=', toc1)) %>%
+    filter(year_id >= 2010,
+           dx_level == 'dx_1') %>%
+    group_by(year_id) %>%
+    summarise(count = n()) %>%
+    collect()
+  df$toc <- toc1
+  print(df)
+  df1 <- rbind(df1, df)
+}
+
+
+tocs <- c('HH','AM', 'ED', 'IP') #'RX'
+df1 <- data.frame()
+for (toc1 in tocs) {
+  print(toc1)
+  df <- open_dataset(paste0(MDCD, '/toc=', toc1)) %>%
+    filter(year_id >= 2010) 
+  if (toc1 != 'RX'){df <- df %>% filter(dx_level == 'dx_1')}
+  df <- df %>%
+    group_by(year_id) %>%
+    summarise(count = n()) %>%
+    collect()
+  df$toc <- toc1
+  print(df)
+  df1 <- rbind(df1, df)
+}
+df2 <- df1 %>% group_by(year_id) %>% summarise(count = sum(count))
+
+mdcr1 <- data.frame()
+for (toc1 in tocs) {
+  print(toc1)
+  mdcr <- open_dataset(paste0(CHIA_MDCR, 'carrier=true/toc=', toc1)) %>%
+    filter(year_id >= 2010) 
+  if (toc1 != 'RX'){mdcr <- mdcr %>% filter(dx_level == 'dx_1')}
+  mdcr <- mdcr %>%
+    group_by(year_id) %>%
+    summarise(count = n()) %>%
+    collect()
+  mdcr$toc <- toc1
+  mdcr$carrier <- 'yes'
+  print(mdcr)
+  mdcr1 <- rbind(mdcr1, mdcr)
+} #DON"T FORGET CHIA
+mdcr2 <- mdcr1 %>% group_by(year_id) %>% summarise(count = sum(count))
