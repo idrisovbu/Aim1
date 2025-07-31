@@ -123,8 +123,13 @@ meta_stats_2019 <- df_input[, .(
   mean_any_cost = mean(has_cost, na.rm = TRUE),
   hiv_unique_bene = uniqueN(bene_id[has_hiv == 1]),
   sud_unique_bene = uniqueN(bene_id[has_sud == 1]),
-  hepc_unique_bene = uniqueN(bene_id[has_hepc == 1])
+  hepc_unique_bene = uniqueN(bene_id[has_hepc == 1]),
+  hiv_and_sud_unique_bene = uniqueN(bene_id[has_hiv == 1 & has_sud == 1]),      
+  hiv_and_hepc_unique_bene = uniqueN(bene_id[has_hiv == 1 & has_hepc == 1]),    
+  sud_and_hepc_unique_bene = uniqueN(bene_id[has_sud == 1 & has_hepc == 1]),    
+  hiv_sud_hepc_unique_bene = uniqueN(bene_id[has_hiv == 1 & has_sud == 1 & has_hepc == 1]) 
 ), by = .(toc, age_group_years_start)]
+
 
 
 # Save metadata
@@ -201,15 +206,13 @@ df_input[, `:=`(
   has_hepc      = factor(has_hepc, levels = c(0, 1)),
   has_cost      = factor(has_cost, levels = c(0, 1))
 )]
-
 ##----------------------------------------------------------------
 ## Check diversity of toc levels (write to log only)
 ##----------------------------------------------------------------
-
 valid_toc_levels <- df_input[, unique(na.omit(as.character(toc)))]
 n_unique_toc <- length(valid_toc_levels)
 
-if (n_unique_toc < 2) {
+if (n_unique_toc < 2 & file_type != "RX") {
   msg <- paste0(
     "❌ REGRESSION HALTED\n",
     "Reason: Less than 2 levels of toc present\n",
@@ -220,7 +223,6 @@ if (n_unique_toc < 2) {
   writeLines(msg, con = log_file)
   stop("Insufficient toc variation for regression (see log).")
 }
-
 
 # Skip iterations with low factor level diversity
 if (nlevels(droplevels(df_input$has_hiv)) < 2 ||
@@ -284,9 +286,9 @@ mod_gamma <- if (file_type == "RX") {
 #   group_by(acause_lvl2, race_cd, age_group_years_start, toc_fact, has_hiv, has_sud) %>%
 #   summarise(predicted_cost = mean(exp_cost), .groups = "drop") %>%
 #   pivot_wider(
-#     names_from = c(has_hiv, has_sud),
+#     names_from = has_hiv,
 #     values_from = predicted_cost,
-#     names_prefix = c("cost_hiv_", "cost_sud_")
+#     names_prefix = "cost_hiv_",
 #   ) %>%
 #   mutate(
 #     cost_hiv_delta = cost_hiv_1 - cost_hiv_0,

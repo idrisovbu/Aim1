@@ -48,7 +48,10 @@ df_params <- data.frame(directory = input_files) %>%
     year_id = as.numeric(sub(".*_(\\d{4})_age\\d+\\.parquet$", "\\1", basename(directory)))
     ) %>%   
   filter(!is.na(year_id)) %>%
-  filter(!(year_id %in% c(2002, 2004, 2006))) 
+  filter(year_id %in% c(2000, 2010, 2014, 2015, 2016, 2019)) # 2000, 2010, 2014, 2015, 2016, 2019 -> These years have the full data for all types of care (excl. RX)
+
+# Manual df_params override for re-running particular jobs
+# df_params <- df_params[c(66, 71), ]
 
 # Write CSV for full job param list
 param_dir <- file.path(l, "LU_CMS/DEX/hivsud/aim1/resources_aim1/")
@@ -71,11 +74,49 @@ jid <- SUBMIT_ARRAY_JOB(
   output_dir = log_dir,
   queue = "all.q", # 256 is longer wait time due to lower nodes but max can be 1024G; max on long is 2048.
   n_jobs = nrow(df_params),
-  memory = "250G", # as of May 15th run 200 was too low, can't process RX data note that w/o interaction
+  memory = "350G", # as of May 15th run 200 was too low, can't process RX data note that w/o interaction
   threads = 1,
-  time = "1:00:00", # 72 hours max with this all.q;
+  time = "12:00:00", # Needs at least 3 hours for each job, RX takes longer than F2T # 72 hours max with this all.q;
   ## long.q is 384H (2 weeks) if its under 72 then do all.q #https://docs.cluster.ihme.washington.edu/#hpc-execution-host-hardware-specifications
   user_email = paste0(user, "@uw.edu"),
   archive = FALSE,
-  test = T  # <-- Change to FALSE when running live
+  test = F  # <-- Change to FALSE when running live
 )
+
+#######################################################
+
+# Check output for unfinished jobs
+date_output <- "20250724"
+#folder_output <- "01.Summary_Statistics" # Change based on folder you want to check
+folder_output <- "02.Regression_Estimates"
+#folder_output <- "03.Meta_Statistics"
+fp_output <- file.path(l, "LU_CMS/DEX/hivsud/aim1/B_analysis/", folder_output, date_output, "/")
+
+output_files <- list.files(fp_output, pattern = "\\.csv$", full.names = FALSE)
+output_files_df <- as.data.table(output_files)
+
+output_files_df$year_id <- as.integer(stringr::str_extract(output_files_df$output_files, "(?<=year)\\d{4}"))
+output_files_df$age_group_years_start <- as.integer(stringr::str_extract(output_files_df$output_files, "(?<=age)\\d+"))
+output_files_df$file_type <- str_extract(output_files_df$output_files, "(?<=_)[^_]+(?=_year)")
+
+# Join to df_params to check which are missing
+df_params_age <- df_params
+df_params_age$age_group_years_start <- as.integer(stringr::str_extract(df_params_age$directory, "(?<=age)\\d+"))
+df_output_check <- left_join(x = df_params_age, y = output_files_df, by = c("year_id", "file_type", "age_group_years_start"))
+
+# Print missing
+df_missing <- df_output_check %>% filter(is.na(output_files))
+
+for (i in 1:nrow(df_missing)) {
+  if (nrow(df_missing) == 0) {
+    print("Nothing missing!")
+    break
+  } else {
+    print(paste0("Missing data for: "))
+    print(df_missing[i, "directory"])
+    cat("\n")
+  }
+}
+
+# 66 (RX 2015 age 65), 71 (RX 2016 age 65) for 01.Summary
+# 71 (RX 2016 age 65) for 03.Meta
