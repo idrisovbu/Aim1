@@ -73,7 +73,7 @@ if (nrow(A1_rx_parameters_pharm) == nrow(df_rx_list_input_data_subset)) {
 dir.create(param_output_dir, recursive = TRUE, showWarnings = FALSE)
 
 # 1. Save full list of RX chunk paths with metadata
-fp_parameters_full <- file.path(param_output_dir, "parameters_rx_chunks.csv")
+fp_parameters_full <- file.path(param_output_dir, "A1_rx_parameters_rx_chunks.csv")
 write.csv(df_rx_list_input_data_subset, file = fp_parameters_full, row.names = FALSE)
 
 # 2. Create and save unique year-based job list for launcher
@@ -82,7 +82,7 @@ df_rx_unique_combos <- df_rx_list_input_data_subset %>%
   distinct() %>%
   arrange(year_id, age_group_years_start)
 
-fp_parameters_unique <- file.path(param_output_dir, "chunk_parameters_rx_unique.csv")
+fp_parameters_unique <- file.path(param_output_dir, "A1_rx_chunk_parameters_rx_unique.csv")
 write.csv(df_rx_unique_combos, file = fp_parameters_unique, row.names = FALSE)
 
 ##----------------------------------------------------------------
