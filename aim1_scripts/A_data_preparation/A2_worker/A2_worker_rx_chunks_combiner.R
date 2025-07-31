@@ -1,12 +1,12 @@
-
 ##----------------------------------------------------------------
-## A2_worker_rx_chunks_combiner.R
+## Title: A2_worker_rx_chunks_combiner.R
 ## Purpose: Read pre-collapsed RX chunk files and merge them into one Parquet per year
 ##----------------------------------------------------------------
 
+##----------------------------------------------------------------
+## 0. Setup Environment
+##----------------------------------------------------------------
 rm(list = ls())
-# Create a personal user library path
-
 pacman::p_load(dplyr, openxlsx, RMySQL, data.table, ini, DBI, tidyr, readr, purrr,arrow)
 library(lbd.loader, lib.loc = sprintf("/share/geospatial/code/geospatial-libraries/lbd.loader-%s", R.version$major))
 if ("dex.dbr" %in% (.packages())) detach("package:dex.dbr", unload = TRUE)
@@ -28,12 +28,9 @@ if (Sys.info()["sysname"] == 'Linux'){
   l <- 'L:/'
 }
 
-
-#####
-# Get parameters
-# ----------------------------------------------------------------
-# Get parameters: define year and rx_files list (interactive or SLURM mode)
-# ----------------------------------------------------------------
+##----------------------------------------------------------------
+## 1. Read in array job parameters
+##----------------------------------------------------------------
 
 if (interactive()) {
   base_output_dir <- file.path(l, "LU_CMS/DEX/hivsud/aim1/A_data_preparation")
@@ -68,10 +65,8 @@ if (interactive()) {
   rx_files <- df_all[year_id == data_year & age_group_years_start == data_age, directory]
 }
 
-####
-
 ##----------------------------------------------------------------
-## Output Directory Setup
+## 2. Define directories
 ##----------------------------------------------------------------
 
 # Define base output directory
@@ -87,8 +82,9 @@ compiled_dir <- file.path(output_folder, "aggregated_by_year")
 # Create directories if they don't exist
 dir.create(compiled_dir, recursive = TRUE, showWarnings = FALSE)
 
+
 ##----------------------------------------------------------------
-## Combine RX Chunks by Year
+## 3. Read data - Combine RX Chunks by Year
 ##----------------------------------------------------------------
 
 # Extract the year assigned by SLURM array task
@@ -117,9 +113,8 @@ for (i in seq_along(year_files)) {
   }
 }
 
-  
 ##----------------------------------------------------------------
-## Final Write Step for Combined Yearly File
+## 4. Save Combined Yearly File
 ##----------------------------------------------------------------
 
 # Combine all files for the year
@@ -167,5 +162,3 @@ message("Saved: ", out_path)
 # Cleanup
 rm(rx_year_df, year_list); gc()
 
-
-#####
