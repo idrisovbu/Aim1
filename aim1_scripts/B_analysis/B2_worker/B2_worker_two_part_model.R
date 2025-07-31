@@ -33,13 +33,13 @@ if (Sys.info()["sysname"] == 'Linux'){
 ##----------------------------------------------------------------
 
 if (interactive()) {
-  path <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/bested/aggregated_by_year/compiled_RX_data_2010_age65.parquet"
-  #path <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/bested/aggregated_by_year/compiled_F2T_data_2010_age65.parquet"
+  #path <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/bested/aggregated_by_year/compiled_RX_data_2010_age65.parquet"
+  path <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/bested/aggregated_by_year/compiled_F2T_data_2010_age65.parquet"
   # df <- read_parquet(path) %>% sample_n(10000) # This loads the whole dataset in and takes a long time
   df <- open_dataset(path) %>% head(100000) %>% collect() %>% sample_n(10000) # Only reads first 100,000 rows, then samples 10,000, much faster
   df <- as.data.table(df)  
   year_id <- 2010
-  file_type <- "RX"
+  file_type <- "F2T"
   age_group_years_start <- df$age_group_years_start[1]
   
   # Optional code to remove low count acause_lvl2 and fix factors only having 0's or 1's
@@ -133,19 +133,11 @@ df[, `:=`(
 ##----------------------------------------------------------------
 
 df_bins_master <- df %>%
+  group_by(acause_lvl2, race_cd, sex_id, age_group_years_start, toc_fact, has_hiv, has_sud) %>%
+  summarise(row_count = n(), .groups = "drop") %>%
   group_by(acause_lvl2, race_cd, sex_id, age_group_years_start, toc_fact) %>%
-  summarise(row_count = n(), .groups="drop") %>%
-  group_by(acause_lvl2, race_cd, age_group_years_start, toc_fact) %>%
   mutate(prop_bin = row_count / sum(row_count, na.rm = TRUE)) %>%
   ungroup()
-
-grid_input_master <- df_bins_master %>%
-  distinct(acause_lvl2, race_cd, sex_id, age_group_years_start, toc_fact) %>%
-  crossing(
-    has_hiv = factor(c(0, 1), levels = levels(df$has_hiv)),
-    has_sud = factor(c(0, 1), levels = levels(df$has_sud))
-  ) %>%
-  left_join(df_bins_master, by = c("acause_lvl2", "race_cd", "sex_id", "age_group_years_start", "toc_fact"))
 
 ##----------------------------------------------------------------
 ## 4. Bootstrap
@@ -199,7 +191,7 @@ for (b in seq_len(B)) {
   df_gamma_input <- df_boot[tot_pay_amt > 0]
   df_gamma_input[, tot_pay_amt := pmin(tot_pay_amt, quantile(tot_pay_amt, 0.995, na.rm = TRUE))]
   
-  # Gamma model
+  # Gamma model (toc_fact removed for RX)
   mod_gamma <- if (file_type == "RX") {
     glm(tot_pay_amt ~ acause_lvl2 * has_hiv + acause_lvl2 * has_sud + race_cd + sex_id,
         data = df_gamma_input, family = Gamma(link = "log"), control = glm.control(maxit = 100))
@@ -209,7 +201,7 @@ for (b in seq_len(B)) {
   }
   
   # Predict in chunks to save memory
-  grid_input_master <- as.data.table(grid_input_master)
+  grid_input_master <- as.data.table(df_bins_master)
   grid_input_master[, prob_has_cost := predict(mod_logit, newdata = .SD, type = "response")]
   grid_input_master[, cost_if_pos := predict(mod_gamma, newdata = .SD, type = "response")]
   grid_input_master[, exp_cost := prob_has_cost * cost_if_pos]
@@ -255,7 +247,7 @@ boot_combined <- open_dataset(bootstrap_chunks_output_folder) %>% collect()
 # Create bootstrap bin summary
 df_bins_summary <- df_bins_master %>%
   group_by(acause_lvl2, race_cd, age_group_years_start, toc_fact) %>%
-  summarise(avg_row_count = sum(row_count, na.rm=TRUE), .groups = "drop")
+  summarise(avg_row_count = floor(mean(row_count, na.rm=TRUE)), .groups = "drop")
 
 # Create main bootstrap output summary, means, quantiles, deltas 
 df_summary <- boot_combined %>%
