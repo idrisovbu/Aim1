@@ -1,16 +1,13 @@
 ##----------------------------------------------------------------
 ##' Title: A2_worker_rx_data_compiler.R
 ##' Purpose:
-##'
 ##' ----------------------------------------------------------------
-rm(list = ls())
-# Create a personal user library path
-user_lib <- file.path(Sys.getenv("HOME"), "R", "library", paste0(R.version$major, ".", R.version$minor))
-dir.create(user_lib, recursive = TRUE, showWarnings = FALSE)
-# 
-# # Prioritize personal library in libPaths
-.libPaths(c(user_lib, .libPaths()))
 
+##----------------------------------------------------------------
+## 0. Setup Environment
+##----------------------------------------------------------------
+
+rm(list = ls())
 pacman::p_load(dplyr, openxlsx, RMySQL, data.table, ini, DBI, tidyr, openxlsx, readr, purrr,arrow)
 library(lbd.loader, lib.loc = sprintf("/share/geospatial/code/geospatial-libraries/lbd.loader-%s", R.version$major))
 if ("dex.dbr" %in% (.packages())) detach("package:dex.dbr", unload = TRUE)
@@ -33,7 +30,7 @@ if (Sys.info()["sysname"] == 'Linux'){
 }
 
 ##----------------------------------------------------------------
-## 0. Read in data
+## 1. Read in data
 ##----------------------------------------------------------------
 
 if (interactive()) {
@@ -64,24 +61,21 @@ if (interactive()) {
   data_year <- unique_years[as.numeric(array_job_number)] 
 }
 
-
-
-# ##----------------------------------------------------------------
-# ##  #define dirs
-# ##----------------------------------------------------------------
+##----------------------------------------------------------------
+## 2. Define directories
+##----------------------------------------------------------------
 
 # Define base output directory
 base_output_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation"
 date_folder <- format(Sys.time(), "%Y%m%d")
 output_folder <- file.path(base_output_dir, date_folder)
 
-# Define subdirectory for RX intermediate files
-#rx_chunk_folder <- file.path(output_folder, "rx_chunks")
-
 # Create the folders if they don't exist
 dir.create(output_folder, showWarnings = FALSE, recursive = TRUE)
-#dir.create(rx_chunk_folder, showWarnings = FALSE, recursive = TRUE)
 
+##----------------------------------------------------------------
+## 3. Read data
+##----------------------------------------------------------------
 
 # -- List of directories based on filtered year -- #
 data_dirs <- df_params %>% filter(year_id == data_year)
@@ -101,6 +95,7 @@ for (i in 1:nrow(data_dirs)) {
   
   # Read in data
   dt <- open_dataset(dir) %>%
+    filter(ENHANCED_FIVE_PERCENT_FLAG == "Y") %>% # Filters on 5% random sample column
     select(claim_id, acause, primary_cause, race_cd, tot_chg_amt) %>%
     collect() %>%
     as.data.table()
@@ -194,7 +189,9 @@ for (i in 1:nrow(data_dirs)) {
   setcolorder(collapsed, intersect(desired_order, names(collapsed)))
 
   
-  #####
+  ##----------------------------------------------------------------
+  ## 4. Save as chunk
+  ##----------------------------------------------------------------
   
   # Extract state abbreviation from directory path
   state <- stringr::str_extract(dir, "(?<=st_resi=)[A-Z]{2}")
@@ -217,4 +214,3 @@ for (i in 1:nrow(data_dirs)) {
   rm(dt, collapsed); gc()
 }
   
-  #######
