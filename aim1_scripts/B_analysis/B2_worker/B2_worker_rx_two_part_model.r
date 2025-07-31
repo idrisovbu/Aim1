@@ -1,7 +1,7 @@
 ##----------------------------------------------------------------
-##' Title: B2_worker_two_part_model.R
+##' Title: B2_worker_rx_model.R
 ##' Notes: # For the future check bootstrap for finite populations
-##' Outputs: /mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/04.Two_Part_Estimates/<date>/bootstrap_results/
+##' Outputs : /mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/04.Two_Part_Estimates/<date>/bootstrap_results/
 ##'          /mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/04.Two_Part_Estimates/<date>/boot_chunks/
 ##----------------------------------------------------------------
 
@@ -127,12 +127,9 @@ df[, `:=`(
   has_cost      = factor(has_cost, levels = c(0, 1))
 )]
 
-
 ##----------------------------------------------------------------
 ## 3. Build bin distribution from the full data, used in bootstrapping
 ##----------------------------------------------------------------
-
-# newcode code
 
 df_bins_master <- df %>%
   group_by(acause_lvl2, race_cd, sex_id, age_group_years_start, toc_fact, has_hiv, has_sud) %>%
@@ -141,40 +138,11 @@ df_bins_master <- df %>%
   mutate(prop_bin = row_count / sum(row_count, na.rm = TRUE)) %>%
   ungroup()
 
-# Now crossing is not needed, you just use the real bins:
-grid_input_master <- df_bins_master
-
-### below can be deleted
-# df_bins_master <- df %>%
-#   group_by(acause_lvl2, race_cd, sex_id, age_group_years_start, toc_fact) %>%
-#   summarise(row_count = n(), .groups="drop") %>%
-#   group_by(acause_lvl2, race_cd, age_group_years_start, toc_fact) %>%
-#   mutate(prop_bin = row_count / sum(row_count, na.rm = TRUE)) %>%
-#   ungroup()
-# 
-# grid_input_master <- df_bins_master %>%
-#   distinct(acause_lvl2, race_cd, sex_id, age_group_years_start, toc_fact) %>%
-#   crossing(
-#     has_hiv = factor(c(0, 1), levels = levels(df$has_hiv)),
-#     has_sud = factor(c(0, 1), levels = levels(df$has_sud))
-#   ) %>%
-#   left_join(df_bins_master, by = c("acause_lvl2", "race_cd", "sex_id", "age_group_years_start", "toc_fact"))
-
-
-table(df$has_hiv, df$has_sud)
-
-df[has_hiv == 1 & has_sud == 0, mean(tot_pay_amt)]
-df[has_hiv == 0 & has_sud == 1, mean(tot_pay_amt)]
-df[has_hiv == 1 & has_sud == 1, mean(tot_pay_amt)]
-
-##
 ##----------------------------------------------------------------
-## 4. Bootstrap (RX only: Mean by group, not regression)
+## 4. Bootstrap (RX only: Mean by group, not regression) (NEEDS FIXING)
 ##----------------------------------------------------------------
 
-# Dynamically set bootstrap iteration number based on filetype
-
-B <- 10 # Or higher for final runs
+B <- 50 # Or higher for final runs
 
 set.seed(123)
 
@@ -194,7 +162,17 @@ for (b in seq_len(B)) {
     has_sud     = factor(has_sud, levels = levels(df$has_sud))
   )]
 
+  ####NOT SURE Which one is ok here below (Bulat)
+  
   # Group means, keeping same keys as before (toc_fact always RX)
+  out_b <- df_boot[, .(cost_neither = mean(tot_pay_amt[has_hiv==0 & has_sud==0], na.rm=TRUE),
+                       cost_hiv_only = mean(tot_pay_amt[has_hiv==1 & has_sud==0], na.rm=TRUE),
+                       cost_sud_only = mean(tot_pay_amt[has_hiv==0 & has_sud==1], na.rm=TRUE)),
+                   by = .(acause_lvl2, race_cd, age_group_years_start, toc_fact)]
+  out_b[, delta_hiv_only := cost_hiv_only - cost_neither]
+  out_b[, delta_sud_only := cost_sud_only - cost_neither]
+  
+  # OLD #
   out_b <- df_boot[, .(exp_cost = mean(tot_pay_amt, na.rm = TRUE)),
                    by = .(acause_lvl2, race_cd, has_hiv, has_sud, age_group_years_start, toc_fact)]
 
@@ -204,6 +182,7 @@ for (b in seq_len(B)) {
     acause_lvl2 + race_cd + age_group_years_start + toc_fact ~ has_hiv + has_sud,
     value.var = "exp_cost"
   )
+  # OLD #
 
   # Fill missing columns as NA if needed
   for (col in c("0_0", "1_0", "0_1", "1_1")) {
@@ -239,10 +218,10 @@ for (b in seq_len(B)) {
 # Combine all bootstrap iterations
 boot_combined <- open_dataset(bootstrap_chunks_output_folder) %>% collect()
 
-# Create bootstrap bin summary (mean of sample sizes per group)
+# Create bootstrap bin summary
 df_bins_summary <- df_bins_master %>%
   group_by(acause_lvl2, race_cd, age_group_years_start, toc_fact) %>%
-  summarise(avg_row_count = sum(row_count, na.rm=TRUE), .groups = "drop")
+  summarise(avg_row_count = floor(mean(row_count, na.rm=TRUE)), .groups = "drop")
 
 # Summarise means, CIs, and deltas just like regression version
 df_summary <- boot_combined %>%
@@ -325,187 +304,3 @@ file_out <- generate_filename("bootstrap_marginal_results", ".csv")
 out_path <- file.path(bootstrap_results_output_folder, file_out)
 write.csv(df_summary, out_path, row.names = FALSE)
 cat("Wrote final CSV to:", out_path, "\n")
-
-
-
-##----------------------------------------------------------------
-## 4. Bootstrap: Single Gamma Regression for RX
-##----------------------------------------------------------------
-
-# B <- 10 # RX, increase to 500 or 1000 for final analysis
-# 
-# set.seed(123)
-# 
-# for (b in seq_len(B)) {
-#   cat("Bootstrap iteration:", b, "/", B, "\n")
-#   
-#   # Sample with replacement
-#   df_boot <- df[sample(.N, replace = TRUE)]
-#   
-#   # Ensure factor levels are preserved
-#   df_boot[, `:=`(
-#     acause_lvl2 = factor(acause_lvl2, levels = levels(df$acause_lvl2)),
-#     race_cd     = factor(race_cd, levels = levels(df$race_cd)),
-#     sex_id      = factor(sex_id, levels = levels(df$sex_id)),
-#     toc_fact    = factor(toc_fact, levels = levels(df$toc_fact)),
-#     has_hiv     = factor(has_hiv, levels = levels(df$has_hiv)),
-#     has_sud     = factor(has_sud, levels = levels(df$has_sud))
-#   )]
-#   
-#   # Cap extreme outliers for stability (as before)
-#   df_boot[, tot_pay_amt := pmin(tot_pay_amt, quantile(tot_pay_amt, 0.995, na.rm = TRUE))]
-#   
-#   # Fit single gamma regression (no two-part, no logit)
-#   mod_gamma <- glm(tot_pay_amt ~ acause_lvl2 * has_hiv + acause_lvl2 * has_sud + race_cd + sex_id,
-#                    data = df_boot, family = Gamma(link = "log"), control = glm.control(maxit = 100))
-#   
-#   # Predict expected cost for each group in grid_input_master
-#   grid_input_master <- as.data.table(grid_input_master)
-#   grid_input_master[, exp_cost := predict(mod_gamma, newdata = .SD, type = "response")]
-#   
-#   # Group summary (matches earlier structure)
-#   out_b <- grid_input_master[, .(exp_cost = sum(exp_cost * prop_bin, na.rm = TRUE)),
-#                              by = .(acause_lvl2, race_cd, has_hiv, has_sud, age_group_years_start, toc_fact)]
-#   
-#   # Pivot to wide format
-#   out_b <- dcast(
-#     out_b,
-#     acause_lvl2 + race_cd + age_group_years_start + toc_fact ~ has_hiv + has_sud,
-#     value.var = "exp_cost"
-#   )
-#   
-#   # Ensure columns exist (set to NA if missing)
-#   for (col in c("0_0", "1_0", "0_1", "1_1")) {
-#     if (!col %in% names(out_b)) out_b[[col]] <- NA_real_
-#   }
-#   setnames(out_b, c("0_0", "1_0", "0_1", "1_1"),
-#            c("cost_neither", "cost_hiv_only", "cost_sud_only", "cost_hiv_sud"))
-#   
-#   # Calculate deltas
-#   out_b[, `:=`(
-#     delta_hiv_only = cost_hiv_only - cost_neither,
-#     delta_sud_only = cost_sud_only - cost_neither,
-#     delta_hiv_sud  = cost_hiv_sud  - cost_neither,
-#     bootstrap_iter = b
-#   )]
-#   
-#   # Write output for this iteration
-#   boot_out_path <- file.path(bootstrap_chunks_output_folder, sprintf("bootstrap_iter_%03d.parquet", b))
-#   write_parquet(out_b, boot_out_path)
-#   cat("Written:", boot_out_path, "\n")
-#   
-#   rm(df_boot, mod_gamma, out_b)
-#   gc(verbose = FALSE)
-# }
-# 
-# 
-# ##----------------------------------------------------------------
-# ## 5. Create Bootstrap Summary Output
-# ##----------------------------------------------------------------
-# 
-# # Combine all bootstrap iterations
-# boot_combined <- open_dataset(bootstrap_chunks_output_folder) %>% collect()
-# 
-# # Create bootstrap bin summary
-# df_bins_summary <- df_bins_master %>%
-#   group_by(acause_lvl2, race_cd, age_group_years_start, toc_fact) %>%
-#   summarise(avg_row_count = sum(row_count, na.rm=TRUE), .groups = "drop")
-# 
-# # Create main bootstrap output summary, means, quantiles, deltas 
-# df_summary <- boot_combined %>%
-#   group_by(acause_lvl2, race_cd, age_group_years_start, toc_fact) %>%
-#   summarise(
-#     mean_cost_neither    = mean(cost_neither, na.rm = TRUE),
-#     mean_cost_hiv_only   = mean(cost_hiv_only, na.rm = TRUE),
-#     mean_cost_sud_only   = mean(cost_sud_only, na.rm = TRUE),
-#     mean_cost_hiv_sud    = mean(cost_hiv_sud, na.rm = TRUE),
-#     
-#     lower_ci_neither     = quantile(cost_neither, 0.025),
-#     upper_ci_neither     = quantile(cost_neither, 0.975),
-#     lower_ci_hiv_only    = quantile(cost_hiv_only, 0.025),
-#     upper_ci_hiv_only    = quantile(cost_hiv_only, 0.975),
-#     lower_ci_sud_only    = quantile(cost_sud_only, 0.025),
-#     upper_ci_sud_only    = quantile(cost_sud_only, 0.975),
-#     lower_ci_hiv_sud     = quantile(cost_hiv_sud, 0.025),
-#     upper_ci_hiv_sud     = quantile(cost_hiv_sud, 0.975),
-#     
-#     mean_delta_hiv_only   = mean(delta_hiv_only, na.rm=TRUE),
-#     mean_delta_sud_only   = mean(delta_sud_only, na.rm=TRUE),
-#     mean_delta_hiv_sud    = mean(delta_hiv_sud, na.rm=TRUE),
-#     
-#     lower_ci_delta_hiv_only   = quantile(delta_hiv_only, 0.025),
-#     upper_ci_delta_hiv_only   = quantile(delta_hiv_only, 0.975),
-#     lower_ci_delta_sud_only   = quantile(delta_sud_only, 0.025),
-#     upper_ci_delta_sud_only   = quantile(delta_sud_only, 0.975),
-#     lower_ci_delta_hiv_sud    = quantile(delta_hiv_sud, 0.025),
-#     upper_ci_delta_hiv_sud    = quantile(delta_hiv_sud, 0.975),
-#     .groups = "drop"
-#   ) %>%
-#   left_join(df_bins_summary, by = c("acause_lvl2", "race_cd", "age_group_years_start", "toc_fact"))
-# 
-# # Add in year_id, file_type
-# df_summary <- df_summary %>%
-#   mutate(
-#     year_id = year_id,
-#     file_type = file_type)
-# 
-# # Rename columns
-# df_summary <- df_summary %>%
-#   rename(
-#     toc                 = toc_fact,
-#     
-#     mean_cost           = mean_cost_neither,
-#     lower_ci            = lower_ci_neither,
-#     upper_ci            = upper_ci_neither,
-#     
-#     mean_cost_hiv       = mean_cost_hiv_only,
-#     lower_ci_hiv        = lower_ci_hiv_only,
-#     upper_ci_hiv        = upper_ci_hiv_only,
-#     
-#     mean_cost_sud       = mean_cost_sud_only,
-#     lower_ci_sud        = lower_ci_sud_only,
-#     upper_ci_sud        = upper_ci_sud_only,
-#     
-#     mean_cost_hiv_sud   = mean_cost_hiv_sud,
-#     lower_ci_hiv_sud    = lower_ci_hiv_sud,
-#     upper_ci_hiv_sud    = upper_ci_hiv_sud,
-#     
-#     mean_delta_hiv      = mean_delta_hiv_only,
-#     lower_ci_delta_hiv  = lower_ci_delta_hiv_only,
-#     upper_ci_delta_hiv  = upper_ci_delta_hiv_only,
-#     
-#     mean_delta_sud      = mean_delta_sud_only,
-#     lower_ci_delta_sud  = lower_ci_delta_sud_only,
-#     upper_ci_delta_sud  = upper_ci_delta_sud_only,
-#     
-#     mean_delta_hiv_sud  = mean_delta_hiv_sud,
-#     lower_ci_delta_hiv_sud = lower_ci_delta_hiv_sud,
-#     upper_ci_delta_hiv_sud = upper_ci_delta_hiv_sud
-#   )
-# 
-# # Reorder columns
-# desired_order <- c(
-#   "acause_lvl2", "race_cd", "toc",
-#   "mean_cost", "lower_ci", "upper_ci",
-#   "mean_cost_hiv", "lower_ci_hiv", "upper_ci_hiv",
-#   "mean_cost_sud", "lower_ci_sud", "upper_ci_sud",
-#   "mean_cost_hiv_sud", "lower_ci_hiv_sud", "upper_ci_hiv_sud",
-#   "mean_delta_hiv", "lower_ci_delta_hiv", "upper_ci_delta_hiv",
-#   "mean_delta_sud",  "lower_ci_delta_sud", "upper_ci_delta_sud",
-#   "mean_delta_hiv_sud", "lower_ci_delta_hiv_sud", "upper_ci_delta_hiv_sud",
-#   "avg_row_count", "age_group_years_start", "year_id", "file_type"
-# )
-# df_summary <- df_summary[, desired_order]
-# 
-# ##----------------------------------------------------------------
-# ## 6. Save to CSV
-# ##----------------------------------------------------------------
-# 
-# # Write to CSV
-# file_out <- generate_filename("bootstrap_marginal_results", ".csv")
-# out_path <- file.path(bootstrap_results_output_folder, file_out)
-# write.csv(df_summary, out_path, row.names = FALSE)
-# cat("Wrote final CSV to:", out_path, "\n")
-# 
-# 
-# 
