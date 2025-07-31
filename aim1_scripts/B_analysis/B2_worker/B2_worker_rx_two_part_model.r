@@ -161,8 +161,6 @@ for (b in seq_len(B)) {
     has_hiv     = factor(has_hiv, levels = levels(df$has_hiv)),
     has_sud     = factor(has_sud, levels = levels(df$has_sud))
   )]
-
-  ####NOT SURE Which one is ok here below (Bulat)
   
   # Group means, keeping same keys as before (toc_fact always RX)
   out_b <- df_boot[, .(cost_neither = mean(tot_pay_amt[has_hiv==0 & has_sud==0], na.rm=TRUE),
@@ -171,33 +169,11 @@ for (b in seq_len(B)) {
                    by = .(acause_lvl2, race_cd, age_group_years_start, toc_fact)]
   out_b[, delta_hiv_only := cost_hiv_only - cost_neither]
   out_b[, delta_sud_only := cost_sud_only - cost_neither]
-  
-  # OLD #
-  out_b <- df_boot[, .(exp_cost = mean(tot_pay_amt, na.rm = TRUE)),
-                   by = .(acause_lvl2, race_cd, has_hiv, has_sud, age_group_years_start, toc_fact)]
-
-  # Pivot to wide, one column for each (has_hiv, has_sud)
-  out_b <- dcast(
-    out_b,
-    acause_lvl2 + race_cd + age_group_years_start + toc_fact ~ has_hiv + has_sud,
-    value.var = "exp_cost"
-  )
-  # OLD #
-
-  # Fill missing columns as NA if needed
-  for (col in c("0_0", "1_0", "0_1", "1_1")) {
-    if (!col %in% names(out_b)) out_b[[col]] <- NA_real_
-  }
-
-  # Rename for consistency
-  setnames(out_b, c("0_0", "1_0", "0_1", "1_1"),
-           c("cost_neither", "cost_hiv_only", "cost_sud_only", "cost_hiv_sud"))
 
   # Calculate deltas
   out_b[, `:=`(
     delta_hiv_only = cost_hiv_only - cost_neither,
     delta_sud_only = cost_sud_only - cost_neither,
-    delta_hiv_sud  = cost_hiv_sud  - cost_neither,
     bootstrap_iter = b
   )]
 
