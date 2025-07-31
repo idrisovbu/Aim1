@@ -78,8 +78,7 @@ if (interactive()) {
 base_output_dir <- file.path(l, "LU_CMS/DEX/hivsud/aim1/A_data_preparation")
 
 # Date-stamped folder (e.g., A_data_preparation/20250421/)
-#date_folder <- format(Sys.time(), "%Y%m%d")
-date_folder <- "20250620"
+date_folder <- format(Sys.time(), "%Y%m%d")
 output_folder <- file.path(base_output_dir, date_folder)
 
 # Subfolder for final yearly RX datasets
