@@ -4,15 +4,6 @@
 ##'
 ##' ----------------------------------------------------------------
 rm(list = ls())
-
-# Create a personal user library path
-# user_lib <- file.path(Sys.getenv("HOME"), "R", "library", paste0(R.version$major, ".", R.version$minor))
-# dir.create(user_lib, recursive = TRUE, showWarnings = FALSE)
-# 
-# # Prioritize personal library in libPaths
-# .libPaths(c(user_lib, .libPaths()))
-# 
-# # Now load/install packages
 pacman::p_load(dplyr, openxlsx, RMySQL, data.table, ini, DBI, tidyr, readr, purrr, arrow)
 
 library(lbd.loader, lib.loc = sprintf("/share/geospatial/code/geospatial-libraries/lbd.loader-%s", R.version$major))
@@ -41,7 +32,7 @@ if (Sys.info()["sysname"] == 'Linux'){
 
 if (interactive()) {
   # Set filepath for parameters_aims1.csv, this has all filepaths for parquet files
-  fp_parameters <- paste0(l, "/LU_CMS/DEX/hivsud/aim1/resources_aim1/parameters_aims1.csv")
+  fp_parameters <- paste0(l, "/LU_CMS/DEX/hivsud/aim1/resources_aim1/A1_f2t_parameters_aims1.csv")
   df_params <- read.csv(fp_parameters)
   
   # Get unique years to read in
@@ -169,26 +160,12 @@ df <- df %>%
 message("Mapping completed. Number of records: ", nrow(df))
 print(table(is.na(df$acause_lvl2)))   # Should be mostly FALSE (mapped), if many TRUE, join mismatch
 
-# Optional: preview sample
-#print(head(df, 5))
-
-
 ##----------------------------------------------------------------
 ## 4. Collapse to bene × disease category and attach metadata
 ##----------------------------------------------------------------
 # Convert back to data.table if needed
 setDT(df)
 
-# df <- df[, .(
-#   has_hiv           = max(has_hiv, na.rm=TRUE),
-#   has_sud           = max(has_sud, na.rm=TRUE),
-#   has_hepc          = max(has_hepc, na.rm=TRUE),
-#   unique_encounters = uniqueN(encounter_id),
-#   tot_pay_amt       = sum(tot_pay_amt, na.rm=TRUE),
-#   has_cost          = as.integer(sum(tot_pay_amt, na.rm=TRUE) > 0)
-# ), by = .(bene_id, acause_lvl1, acause_lvl2, cause_name_lvl1, cause_name_lvl2,
-#           year_id, age_group_years_start, toc, race_cd, sex_id)]
-# 
 df <- df[, .(
   has_hiv           = max(has_hiv, na.rm=TRUE),
   has_sud           = max(has_sud, na.rm=TRUE),
@@ -222,9 +199,6 @@ compiled_dir <- file.path(output_folder, "aggregated_by_year")
 # Create directories if they don't exist
 dir.create(compiled_dir, recursive = TRUE, showWarnings = FALSE)
 
-# # Save to Parquet file
-# write_parquet(df, paste0(compiled_dir, "/compiled_F2T_data_", data_year, ".parquet"))
-
 # Get unique age groups in the data
 unique_age_groups <- sort(unique(df$age_group_years_start))
 
@@ -236,5 +210,4 @@ for (ag in unique_age_groups) {
   write_parquet(df_age, fpath)
   message("Saved: ", fpath)
 }
-
 
