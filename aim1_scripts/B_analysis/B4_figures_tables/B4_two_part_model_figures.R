@@ -21,6 +21,13 @@ pacman::p_load(ggplot2, readr, tidyverse, viridis, scales,ggsci)
 #output_dir <- paste0("C:/Users/aches/Desktop/Stuff/Bulat PhD/Plots/", date_today, "/") # Set as necessary
 
 ####################################
+# Bulat's own mac
+####################################
+date_today <- format(Sys.time(), "%Y%m%d")
+input_dir <- "C:/Users/bulatidrisov/Aim1WD/aim1_Input_personal_mac" 
+output_dir <- "/Users/bulatidrisov/Aim1WD/aim1_output_personal_mac"
+
+####################################
 # Set directories working on IHME enviroment
 ####################################
 
