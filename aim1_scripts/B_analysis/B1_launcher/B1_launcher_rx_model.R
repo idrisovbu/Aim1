@@ -11,7 +11,6 @@ pacman::p_load(dplyr, openxlsx, RMySQL, data.table, ini, DBI, tidyr, openxlsx)
 library(lbd.loader, lib.loc = sprintf("/share/geospatial/code/geospatial-libraries/lbd.loader-%s", R.version$major))
 if("dex.dbr"%in% (.packages())) detach("package:dex.dbr", unload=TRUE)
 library(dex.dbr, lib.loc = lbd.loader::pkg_loc("dex.dbr"))
-suppressMessages(lbd.loader::load.containing.package())
 
 # Set drive paths
 if (Sys.info()["sysname"] == 'Linux'){
@@ -54,7 +53,7 @@ fwrite(df_params, fp_parameters)
 
 # Define script and output paths
 user <- Sys.info()[["user"]]
-script_path <- file.path(h, "repo/dex_us_county/misc/hivsud/aim1_scripts/B_analysis/B2_worker/B2_worker_rx_model.R")
+script_path <- file.path(h, "repo/Aim1/aim1_scripts/B_analysis/B2_worker/B2_worker_rx_model.R")
 log_dir <- file.path(l, "LU_CMS/DEX/hivsud/aim1/B_analysis/logs")
 dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
 

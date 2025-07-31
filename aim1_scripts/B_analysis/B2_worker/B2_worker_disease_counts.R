@@ -14,11 +14,9 @@ pacman::p_load(
   openxlsx, RMySQL, data.table, ini, DBI
 )
 
-#dplyr,tidyr
 library(lbd.loader, lib.loc = sprintf("/share/geospatial/code/geospatial-libraries/lbd.loader-%s", R.version$major))
 if ("dex.dbr" %in% (.packages())) detach("package:dex.dbr", unload = TRUE)
 library(dex.dbr, lib.loc = lbd.loader::pkg_loc("dex.dbr"))
-suppressMessages(lbd.loader::load.containing.package())
 
 # Set drive paths
 if (Sys.info()["sysname"] == 'Linux'){

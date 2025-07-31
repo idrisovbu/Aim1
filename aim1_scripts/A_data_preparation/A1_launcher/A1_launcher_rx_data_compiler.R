@@ -14,7 +14,6 @@ pacman::p_load(dplyr, openxlsx, RMySQL, data.table, ini, DBI, tidyr, openxlsx)
 library(lbd.loader, lib.loc = sprintf("/share/geospatial/code/geospatial-libraries/lbd.loader-%s", R.version$major))
 if("dex.dbr"%in% (.packages())) detach("package:dex.dbr", unload=TRUE)
 library(dex.dbr, lib.loc = lbd.loader::pkg_loc("dex.dbr"))
-suppressMessages(lbd.loader::load.containing.package())
 
 # Set drive paths
 if (Sys.info()["sysname"] == 'Linux'){
@@ -101,7 +100,7 @@ ensure_dir_exists <- function(dir_path) {
 ensure_dir_exists(log_dir)
 
 # Update script path to new organized structure
-script_path <- paste0(h, "/repo/dex_us_county/misc/hivsud/aim1_scripts/A_data_preparation/A2_worker/A2_worker_rx_data_compiler.R")
+script_path <- paste0(h, "/repo/Aim1/aim1_scripts/A_data_preparation/A2_worker/A2_worker_rx_data_compiler.R")
 
 ##----------------------------------------------------------------
 ## 3. Submit jobs
