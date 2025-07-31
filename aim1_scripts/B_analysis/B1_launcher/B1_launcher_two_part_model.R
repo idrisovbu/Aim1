@@ -1,5 +1,5 @@
 ##----------------------------------------------------------------
-##' Title: 01_launcher_two_part_model.R
+##' Title: B1_launcher_two_part_model.R
 ##' Author: Bulat Idrisov
 ##' Date: 2025-05-04
 ##----------------------------------------------------------------
@@ -28,7 +28,7 @@ if (Sys.info()["sysname"] == 'Linux'){
   l <- 'L:/'
 }
 
-# Input location (adjust date as needed based on the run date)
+# Input location
 run_date <- "bested" # bested was 20250620 (update as needed)
 fp_input_data <- file.path(l, "LU_CMS/DEX/hivsud/aim1/A_data_preparation", run_date, "aggregated_by_year")
 
@@ -43,8 +43,8 @@ df_params <- data.frame(directory = input_files) %>%
     age_group_years_start = as.numeric(str_extract(basename(directory), "(?<=_age)\\d+"))
   ) %>%
   filter(!is.na(year_id)) %>%
-  filter(!(year_id %in% c(2002, 2004, 2006)))%>%
-  filter(file_type == "RX")  #delete after processing
+  filter(file_type == "F2T") %>% # Only filter on F2T data
+  filter(year_id %in% c(2000, 2010, 2014, 2015, 2016, 2019)) # 2000, 2010, 2014, 2015, 2016, 2019 -> These years have the full data for all types of care (excl. RX)
 
 # Write CSV for full job param list
 param_dir <- file.path(l, "LU_CMS/DEX/hivsud/aim1/resources_aim1/")
@@ -65,13 +65,15 @@ jid <- SUBMIT_ARRAY_JOB(
   args = c(fp_parameters),
   error_dir = log_dir,
   output_dir = log_dir,
-  queue = "long.q", # 256 is longer wait time due to lower nodes but max can be 1024G; max on long is 2048.
+  queue = "all.q", # 256 is longer wait time due to lower nodes but max can be 1024G; max on long is 2048.
   n_jobs = nrow(df_params),
-  memory = "1000G", # 750as of May 26th run 750G on allq was ok, but needed more than 16hours time, need to put on long with 3 days at least
+  memory = "350G", # 750as of May 26th run 750G on allq was ok, but needed more than 16hours time, need to put on long with 3 days at least
   threads = 1,
-  time = "24:00:00", #120:00:00 72 hours max with this all.q; "24:00:00""
+  time = "4:00:00", 
+  # RX on July 25th run at 144:00:00" and 1000G on long.q
+  # 120:00:00 72 hours max with this all.q; "24:00:00"" T
   ## long.q is 384H (2 weeks) if its under 72 then do all.q #https://docs.cluster.ihme.washington.edu/#hpc-execution-host-hardware-specifications
   user_email = paste0(user, "@uw.edu"),
   archive = FALSE,
-  test = T  # 
+  test = T  # T for Testing, F (false) for Full run
 )
