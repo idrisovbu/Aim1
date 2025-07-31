@@ -95,7 +95,7 @@ ensure_dir_exists <- function(dir_path) {
 
 # Define key variables
 user <- Sys.info()[["user"]]
-script_path <- paste0(h, "/repo/dex_us_county/misc/hivsud/aim1_scripts/A_data_preparation/A2_worker/A2_worker_f2t_data_compiler.R")
+script_path <- paste0(h, "/repo/Aim1/aim1_scripts/A_data_preparation/A2_worker/A2_worker_f2t_data_compiler.R")
 
 # Define output and log directory paths
 date_folder <- format(Sys.Date(), "%Y%m%d")
