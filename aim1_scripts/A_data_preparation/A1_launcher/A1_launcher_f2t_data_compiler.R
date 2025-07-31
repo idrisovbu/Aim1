@@ -99,7 +99,7 @@ script_path <- paste0(h, "/repo/dex_us_county/misc/hivsud/aim1_scripts/A_data_pr
 
 # Define output and log directory paths
 date_folder <- format(Sys.Date(), "%Y%m%d")
-log_dir <- file.path("/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/logs", date_folder)
+log_dir <- file.path("/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/logs/")
 
 # Create output and log directories
 ensure_dir_exists(log_dir)
@@ -109,7 +109,7 @@ ensure_dir_exists(log_dir)
 ##----------------------------------------------------------------
 # Submit jobs to the cluster - Launcher Script for Aim 1 study - All Years, Ages, TOC from fp_parameter
 jid <- SUBMIT_ARRAY_JOB(
-  name = "aim1_f2t_df_compiler",
+  name = "aim1_f2t_data_compiler",
   script = script_path,
   args = c(fp_parameters), # Path to CSV with parameters
   error_dir = log_dir,
