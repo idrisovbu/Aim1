@@ -11,6 +11,7 @@ pacman::p_load(arrow, dplyr, openxlsx, RMySQL, data.table, ini, DBI, tidyr, open
 library(lbd.loader, lib.loc = sprintf("/share/geospatial/code/geospatial-libraries/lbd.loader-%s", R.version$major))
 if("dex.dbr"%in% (.packages())) detach("package:dex.dbr", unload=TRUE)
 library(dex.dbr, lib.loc = lbd.loader::pkg_loc("dex.dbr"))
+suppressMessages(devtools::load_all(path = "/ihme/homes/idrisov/repo/dex_us_county/"))
 
 # Set drive paths
 if (Sys.info()["sysname"] == 'Linux'){
@@ -205,7 +206,6 @@ df_summary <- boot_combined %>%
     mean_cost_neither    = mean(cost_neither, na.rm = TRUE),
     mean_cost_hiv_only   = mean(cost_hiv_only, na.rm = TRUE),
     mean_cost_sud_only   = mean(cost_sud_only, na.rm = TRUE),
-    mean_cost_hiv_sud    = mean(cost_hiv_sud, na.rm = TRUE),
 
     lower_ci_neither     = quantile(cost_neither, 0.025, na.rm = TRUE),
     upper_ci_neither     = quantile(cost_neither, 0.975, na.rm = TRUE),
@@ -213,19 +213,14 @@ df_summary <- boot_combined %>%
     upper_ci_hiv_only    = quantile(cost_hiv_only, 0.975, na.rm = TRUE),
     lower_ci_sud_only    = quantile(cost_sud_only, 0.025, na.rm = TRUE),
     upper_ci_sud_only    = quantile(cost_sud_only, 0.975, na.rm = TRUE),
-    lower_ci_hiv_sud     = quantile(cost_hiv_sud, 0.025, na.rm = TRUE),
-    upper_ci_hiv_sud     = quantile(cost_hiv_sud, 0.975, na.rm = TRUE),
 
     mean_delta_hiv_only   = mean(delta_hiv_only, na.rm=TRUE),
     mean_delta_sud_only   = mean(delta_sud_only, na.rm=TRUE),
-    mean_delta_hiv_sud    = mean(delta_hiv_sud, na.rm=TRUE),
 
     lower_ci_delta_hiv_only   = quantile(delta_hiv_only, 0.025, na.rm = TRUE),
     upper_ci_delta_hiv_only   = quantile(delta_hiv_only, 0.975, na.rm = TRUE),
     lower_ci_delta_sud_only   = quantile(delta_sud_only, 0.025, na.rm = TRUE),
     upper_ci_delta_sud_only   = quantile(delta_sud_only, 0.975, na.rm = TRUE),
-    lower_ci_delta_hiv_sud    = quantile(delta_hiv_sud, 0.025, na.rm = TRUE),
-    upper_ci_delta_hiv_sud    = quantile(delta_hiv_sud, 0.975, na.rm = TRUE),
     .groups = "drop"
   ) %>%
   left_join(df_bins_summary, by = c("acause_lvl2", "race_cd", "age_group_years_start", "toc_fact"))
@@ -243,18 +238,12 @@ df_summary <- df_summary %>%
     mean_cost_sud       = mean_cost_sud_only,
     lower_ci_sud        = lower_ci_sud_only,
     upper_ci_sud        = upper_ci_sud_only,
-    mean_cost_hiv_sud   = mean_cost_hiv_sud,
-    lower_ci_hiv_sud    = lower_ci_hiv_sud,
-    upper_ci_hiv_sud    = upper_ci_hiv_sud,
     mean_delta_hiv      = mean_delta_hiv_only,
     lower_ci_delta_hiv  = lower_ci_delta_hiv_only,
     upper_ci_delta_hiv  = upper_ci_delta_hiv_only,
     mean_delta_sud      = mean_delta_sud_only,
     lower_ci_delta_sud  = lower_ci_delta_sud_only,
-    upper_ci_delta_sud  = upper_ci_delta_sud_only,
-    mean_delta_hiv_sud  = mean_delta_hiv_sud,
-    lower_ci_delta_hiv_sud = lower_ci_delta_hiv_sud,
-    upper_ci_delta_hiv_sud = upper_ci_delta_hiv_sud
+    upper_ci_delta_sud  = upper_ci_delta_sud_only
   )
 
 # Reorder columns
@@ -263,10 +252,8 @@ desired_order <- c(
   "mean_cost", "lower_ci", "upper_ci",
   "mean_cost_hiv", "lower_ci_hiv", "upper_ci_hiv",
   "mean_cost_sud", "lower_ci_sud", "upper_ci_sud",
-  "mean_cost_hiv_sud", "lower_ci_hiv_sud", "upper_ci_hiv_sud",
   "mean_delta_hiv", "lower_ci_delta_hiv", "upper_ci_delta_hiv",
   "mean_delta_sud",  "lower_ci_delta_sud", "upper_ci_delta_sud",
-  "mean_delta_hiv_sud", "lower_ci_delta_hiv_sud", "upper_ci_delta_hiv_sud",
   "total_row_count", "age_group_years_start", "year_id", "file_type"
 )
 df_summary <- df_summary[, desired_order]
