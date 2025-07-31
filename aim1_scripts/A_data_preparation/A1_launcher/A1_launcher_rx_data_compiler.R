@@ -14,6 +14,7 @@ pacman::p_load(dplyr, openxlsx, RMySQL, data.table, ini, DBI, tidyr, openxlsx)
 library(lbd.loader, lib.loc = sprintf("/share/geospatial/code/geospatial-libraries/lbd.loader-%s", R.version$major))
 if("dex.dbr"%in% (.packages())) detach("package:dex.dbr", unload=TRUE)
 library(dex.dbr, lib.loc = lbd.loader::pkg_loc("dex.dbr"))
+suppressMessages(devtools::load_all(path = "/ihme/homes/idrisov/repo/dex_us_county/"))
 
 # Set drive paths
 if (Sys.info()["sysname"] == 'Linux'){

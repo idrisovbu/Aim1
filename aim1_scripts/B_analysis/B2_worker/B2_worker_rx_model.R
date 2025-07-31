@@ -138,10 +138,10 @@ df_bins_master <- df %>%
   ungroup()
 
 ##----------------------------------------------------------------
-## 4. Bootstrap (RX only: Mean by group, not regression) (NEEDS FIXING)
+## 4. Bootstrap (RX only: Mean by group, not regression)
 ##----------------------------------------------------------------
 
-B <- 50 # Or higher for final runs
+B <- 50
 
 set.seed(123)
 
