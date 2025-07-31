@@ -1,13 +1,12 @@
 ##----------------------------------------------------------------
 ##' Title: A1_launcher_f2t_data_compiler.R
 ##'
-##' Purpose:
-##' 
-##'
+##' Purpose: Launches jobs to read in all raw F2T data, saving only the columns we need and assigning variables pertaining to hiv / sud
 ##----------------------------------------------------------------
 
-
-# # Clear environment and set library paths
+##----------------------------------------------------------------
+## 0. Clear environment and set library paths
+##----------------------------------------------------------------
 rm(list = ls())
 
 pacman::p_load(dplyr, openxlsx, RMySQL, data.table, ini, DBI, tidyr, openxlsx)
@@ -31,7 +30,9 @@ if (Sys.info()["sysname"] == 'Linux'){
   l <- 'L:/'
 }
 
-
+##----------------------------------------------------------------
+## 1. Create parameters CSV file
+##----------------------------------------------------------------
 # Dynamically read in directories where data is stored to see what data they have in the first place
 # Create a table based off their directory hierarchy (use code to scan folder directories to determine available data)
 run_id <- 77
@@ -64,37 +65,27 @@ df_list_input_data_subset <- df_list_input_data_subset %>% mutate(toc = str_extr
 # Convert age_group_years_start to numeric if a character string
 df_list_input_data_subset$age_group_years_start <- as.numeric(df_list_input_data_subset$age_group_years_start)
 
-# Filter out ages below 65
-
-# df_list_input_data_subset <- df_list_input_data_subset %>% 
-#   filter(age_group_years_start >= 65 & age_group_years_start <= 85 & year_id != 2000)
+# Filter out ages below 65 and above 85, and specifically filter out toc = NF for 2019
 df_list_input_data_subset <- df_list_input_data_subset %>%
   filter(
     age_group_years_start >= 65,
     age_group_years_start <= 85,
-    !year_id %in% c("2002", "2004", "2006", "2000")
+    !(toc == "NF" & year_id != "2019")
   )
 
-
+# Tabular visualiaztion of available TOC per year
+df_list_input_data_subset %>%
+  group_by(year_id) %>%
+  summarise(toc_values = paste(sort(unique(toc)), collapse = ", ")) %>%
+  arrange(year_id)
 
 # Save the filtered parameters to CSV save list as .csv for runner script to read in based off job
-fp_parameters <- paste0(l, "/LU_CMS/DEX/hivsud/aim1/resources_aim1/parameters_aims1.csv")
+fp_parameters <- paste0(l, "/LU_CMS/DEX/hivsud/aim1/resources_aim1/A1_f2t_parameters_aims1.csv")
 write.csv(df_list_input_data_subset, file = fp_parameters, row.names = FALSE)
 
-
-# Define key variables
-user <- Sys.info()[["user"]]
-script_path <- paste0(h, "/repo/dex_us_county/misc/hivsud/aim1_scripts/A_data_preparation/A2_worker/A2_worker_f2t_data_compiler.R")
-output_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/output_aim1/"
-# Define output and log directory paths
-date_folder <- format(Sys.Date(), "%Y%m%d")
-log_dir <- file.path("/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/logs", date_folder)
-
-
-# Create output and log directories
-if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
-if (!dir.exists(log_dir)) dir.create(log_dir, recursive = TRUE)
-
+##----------------------------------------------------------------
+## 2. Define variables for job / create output folders
+##----------------------------------------------------------------
 # Function to ensure the logs directory exists
 ensure_dir_exists <- function(dir_path) {
   if (!dir.exists(dir_path)) {
@@ -102,21 +93,34 @@ ensure_dir_exists <- function(dir_path) {
   }
 }
 
+# Define key variables
+user <- Sys.info()[["user"]]
+script_path <- paste0(h, "/repo/dex_us_county/misc/hivsud/aim1_scripts/A_data_preparation/A2_worker/A2_worker_f2t_data_compiler.R")
 
+# Define output and log directory paths
+date_folder <- format(Sys.Date(), "%Y%m%d")
+log_dir <- file.path("/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/logs", date_folder)
+
+# Create output and log directories
+ensure_dir_exists(log_dir)
+
+##----------------------------------------------------------------
+## 3. Submit jobs
+##----------------------------------------------------------------
 # Submit jobs to the cluster - Launcher Script for Aim 1 study - All Years, Ages, TOC from fp_parameter
 jid <- SUBMIT_ARRAY_JOB(
   name = "aim1_f2t_df_compiler",
   script = script_path,
-  args = c(fp_parameters), #I'm thinking this is the file path to our arguments (fp_arguments) .csv file we created with the parameter permutations
+  args = c(fp_parameters), # Path to CSV with parameters
   error_dir = log_dir,
   output_dir = log_dir,
   queue = "long.q",
   n_jobs = length(unique(df_list_input_data_subset$year_id)),
-  #n_jobs = 5, #just for testing purposes
-  memory = "250G", #determine based off running job on May 18th
-  threads = 1, # can usually keep at 1 unless the code itself is doing something complicated
-  time = "12:00:00", # determine based off running job on May 18th
+  memory = "250G", 
+  threads = 1, 
+  time = "5:00:00", 
   user_email = paste0(user, "@uw.edu"),
   archive = FALSE,
-  test = F # In R, T = TRUE
+  test = F # F = Full Run, T = Test Run (only run the first job in a batch)
 )
+
