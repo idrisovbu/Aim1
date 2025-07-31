@@ -143,12 +143,7 @@ df_bins_master <- df %>%
 ## 4. Bootstrap
 ##----------------------------------------------------------------
 
-# Dynamically set bootstrap iteration number based on filetype 
-if (file_type == "RX") {
-  B <- 2 # RX (2 iterations can finish within ~24 hours or so)
-  } else {
-  B <- 40 # F2T processed on 40
-  }
+B <- 50 # Number of bootstrap iterations
  
 # Set seed
 set.seed(123)
