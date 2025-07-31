@@ -1,5 +1,5 @@
 ##----------------------------------------------------------------
-##' Title: 02_worker_data_complier_RX.R
+##' Title: A2_worker_rx_data_compiler.R
 ##' Purpose:
 ##'
 ##' ----------------------------------------------------------------
@@ -38,7 +38,7 @@ if (Sys.info()["sysname"] == 'Linux'){
 
 if (interactive()) {
   # Set filepath for parameters_aims1.csv, this has all filepaths for parquet files
-  fp_parameters <- paste0(l, "LU_CMS/DEX/hivsud/aim1/resources_pharm/parameters_pharm.csv")
+  fp_parameters <- paste0(l, "LU_CMS/DEX/hivsud/aim1/resources_pharm/A1_rx_parameters_pharm.csv")
   df_params <- read.csv(fp_parameters)
   
   # Get unique years to read in
@@ -72,8 +72,7 @@ if (interactive()) {
 
 # Define base output directory
 base_output_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation"
-date_folder <- "20250620"
-#date_folder <- format(Sys.time(), "%Y%m%d")
+date_folder <- format(Sys.time(), "%Y%m%d")
 output_folder <- file.path(base_output_dir, date_folder)
 
 # Define subdirectory for RX intermediate files
