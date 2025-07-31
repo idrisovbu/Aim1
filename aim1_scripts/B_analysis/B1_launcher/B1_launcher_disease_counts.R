@@ -2,11 +2,11 @@
 ##' Title: 01_launcher_disease_counts.R
 ##'
 ##' Purpose:
-##' This script launches jobs to count and summarize disease occurrences among 
+##' This script launches jobs to count and summarize disease occurrences among other things
 #
 ##'
 ##' Author: Bulat Idrisov
-##' Date: 
+##' Date: 7/31/25
 ##----------------------------------------------------------------
 
 # # Clear environment and set library paths
