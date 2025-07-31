@@ -78,9 +78,9 @@ jid <- SUBMIT_ARRAY_JOB(
   output_dir = log_dir,
   queue = "all.q",
   n_jobs = nrow(df_params),
-  memory = "350G", # 7/31 Need to document and update
+  memory = "50G", # 7/31 Need to document and update
   threads = 1,
-  time = "12:00:00", # 7/31 Need to document and update
+  time = "2:00:00", # 7/31 Need to document and update
   ## long.q is 384H (2 weeks) if its under 72 then do all.q #https://docs.cluster.ihme.washington.edu/#hpc-execution-host-hardware-specifications
   user_email = paste0(user, "@uw.edu"),
   archive = FALSE,
