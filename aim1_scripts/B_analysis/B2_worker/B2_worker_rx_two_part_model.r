@@ -197,7 +197,7 @@ boot_combined <- open_dataset(bootstrap_chunks_output_folder) %>% collect()
 # Create bootstrap bin summary
 df_bins_summary <- df_bins_master %>%
   group_by(acause_lvl2, race_cd, age_group_years_start, toc_fact) %>%
-  summarise(avg_row_count = floor(mean(row_count, na.rm=TRUE)), .groups = "drop")
+  summarise(total_row_count = sum(row_count, na.rm=TRUE), .groups = "drop")
 
 # Summarise means, CIs, and deltas just like regression version
 df_summary <- boot_combined %>%
@@ -268,7 +268,7 @@ desired_order <- c(
   "mean_delta_hiv", "lower_ci_delta_hiv", "upper_ci_delta_hiv",
   "mean_delta_sud",  "lower_ci_delta_sud", "upper_ci_delta_sud",
   "mean_delta_hiv_sud", "lower_ci_delta_hiv_sud", "upper_ci_delta_hiv_sud",
-  "avg_row_count", "age_group_years_start", "year_id", "file_type"
+  "total_row_count", "age_group_years_start", "year_id", "file_type"
 )
 df_summary <- df_summary[, desired_order]
 
