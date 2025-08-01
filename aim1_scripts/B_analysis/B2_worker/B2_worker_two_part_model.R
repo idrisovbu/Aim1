@@ -33,12 +33,11 @@ if (Sys.info()["sysname"] == 'Linux'){
 ##----------------------------------------------------------------
 
 if (interactive()) {
-  #path <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/bested/aggregated_by_year/compiled_RX_data_2010_age65.parquet"
-  path <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/bested/aggregated_by_year/compiled_F2T_data_2010_age65.parquet"
+  path <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/bested/aggregated_by_year/compiled_F2T_data_2019_age85.parquet"
   # df <- read_parquet(path) %>% sample_n(10000) # This loads the whole dataset in and takes a long time
   df <- open_dataset(path) %>% head(100000) %>% collect() %>% sample_n(10000) # Only reads first 100,000 rows, then samples 10,000, much faster
   df <- as.data.table(df)  
-  year_id <- 2010
+  year_id <- 2019
   file_type <- "F2T"
   age_group_years_start <- df$age_group_years_start[1]
   
@@ -71,7 +70,7 @@ if (interactive()) {
   
   # Load data (can switch to open_dataset() if needed)
   df <- read_parquet(fp_input) %>% as.data.table()
-  age_group_years_start <- df$age_group_years_start[1]  # take the first row value, assuming all rows have the same age
+  age_group_years_start <- df$age_group_years_start[1]
 }
 
 ##----------------------------------------------------------------
@@ -101,6 +100,7 @@ output_folder <- file.path(base_output_dir, "04.Two_Part_Estimates", date_folder
 # Define subfolders for output types
 bootstrap_results_output_folder <- file.path(output_folder, "bootstrap_results")
 bootstrap_chunks_output_folder <- file.path(output_folder, "boot_chunks", generate_filename("boot", ""))
+bin_summary_output_folder <- file.path(output_folder, "bin_summary")
 
 # Create logs subfolder inside summary stats
 log_folder <- file.path(base_output_dir, "logs")
@@ -108,6 +108,7 @@ log_folder <- file.path(base_output_dir, "logs")
 # Create all necessary directories
 ensure_dir_exists(bootstrap_results_output_folder)
 ensure_dir_exists(bootstrap_chunks_output_folder)
+ensure_dir_exists(bin_summary_output_folder)
 ensure_dir_exists(log_folder)
 
 ##----------------------------------------------------------------
@@ -144,17 +145,17 @@ df_bins_master <- df %>%
 ##----------------------------------------------------------------
 
 B <- 50 # Number of bootstrap iterations
- 
+
 # Set seed
 set.seed(123)
 
 # Bootstrap
 for (b in seq_len(B)) {
   cat("Bootstrap iteration:", b, "/", B, "\n")
-  
+
   # Sample with replacement — efficient in data.table
   df_boot <- df[sample(.N, replace = TRUE)]
-  
+
   # Ensure factor levels are preserved
   df_boot[, `:=`(
     acause_lvl2 = factor(acause_lvl2, levels = levels(df$acause_lvl2)),
@@ -164,7 +165,7 @@ for (b in seq_len(B)) {
     has_hiv     = factor(has_hiv, levels = levels(df$has_hiv)),
     has_sud     = factor(has_sud, levels = levels(df$has_sud))
   )]
-  
+
   # Skip iterations with low factor level diversity
   if (nlevels(droplevels(df_boot$has_hiv)) < 2 ||
       nlevels(droplevels(df_boot$has_sud)) < 2 ||
@@ -172,7 +173,7 @@ for (b in seq_len(B)) {
     cat("Skipping iteration", b, "- insufficient factor diversity\n")
     next
   }
-  
+
   # Logistic model (toc_fact removed for RX)
   mod_logit <- if (file_type == "RX") {
     glm(has_cost ~ acause_lvl2 * has_hiv + acause_lvl2 * has_sud + race_cd + sex_id,
@@ -181,11 +182,11 @@ for (b in seq_len(B)) {
     glm(has_cost ~ acause_lvl2 * has_hiv + acause_lvl2 * has_sud + race_cd + sex_id + toc_fact,
         data = df_boot, family = binomial(link = "logit"))
   }
-  
+
   # Gamma input
   df_gamma_input <- df_boot[tot_pay_amt > 0]
   df_gamma_input[, tot_pay_amt := pmin(tot_pay_amt, quantile(tot_pay_amt, 0.995, na.rm = TRUE))]
-  
+
   # Gamma model (toc_fact removed for RX)
   mod_gamma <- if (file_type == "RX") {
     glm(tot_pay_amt ~ acause_lvl2 * has_hiv + acause_lvl2 * has_sud + race_cd + sex_id,
@@ -194,39 +195,39 @@ for (b in seq_len(B)) {
     glm(tot_pay_amt ~ acause_lvl2 * has_hiv + acause_lvl2 * has_sud + race_cd + sex_id + toc_fact,
         data = df_gamma_input, family = Gamma(link = "log"), control = glm.control(maxit = 100))
   }
-  
+
   # Predict in chunks to save memory
   grid_input_master <- as.data.table(df_bins_master)
   grid_input_master[, prob_has_cost := predict(mod_logit, newdata = .SD, type = "response")]
   grid_input_master[, cost_if_pos := predict(mod_gamma, newdata = .SD, type = "response")]
   grid_input_master[, exp_cost := prob_has_cost * cost_if_pos]
-  
+
   # Group summary
   out_b <- grid_input_master[, .(exp_cost = sum(exp_cost * prop_bin, na.rm = TRUE)),
                              by = .(acause_lvl2, race_cd, has_hiv, has_sud, age_group_years_start, toc_fact)]
-  
+
   out_b <- dcast(
     out_b,
     acause_lvl2 + race_cd + age_group_years_start + toc_fact ~ has_hiv + has_sud,
     value.var = "exp_cost"
   )
-  
+
   # Rename and compute deltas
   setnames(out_b, c("0_0", "1_0", "0_1", "1_1"),
            c("cost_neither", "cost_hiv_only", "cost_sud_only", "cost_hiv_sud"))
-  
+
   out_b[, `:=`(
     delta_hiv_only = cost_hiv_only - cost_neither,
     delta_sud_only = cost_sud_only - cost_neither,
     delta_hiv_sud  = cost_hiv_sud - cost_neither,
     bootstrap_iter = b
   )]
-  
+
   # Write output for this iteration
   boot_out_path <- file.path(bootstrap_chunks_output_folder, sprintf("bootstrap_iter_%03d.parquet", b))
   write_parquet(out_b, boot_out_path)
   cat("Written:", boot_out_path, "\n")
-  
+
   # Cleanup
   rm(df_boot, df_gamma_input, mod_logit, mod_gamma, out_b)
   gc(verbose = FALSE)
@@ -253,25 +254,25 @@ df_summary <- boot_combined %>%
     mean_cost_sud_only   = mean(cost_sud_only, na.rm = TRUE),
     mean_cost_hiv_sud    = mean(cost_hiv_sud, na.rm = TRUE),
     
-    lower_ci_neither     = quantile(cost_neither, 0.025),
-    upper_ci_neither     = quantile(cost_neither, 0.975),
-    lower_ci_hiv_only    = quantile(cost_hiv_only, 0.025),
-    upper_ci_hiv_only    = quantile(cost_hiv_only, 0.975),
-    lower_ci_sud_only    = quantile(cost_sud_only, 0.025),
-    upper_ci_sud_only    = quantile(cost_sud_only, 0.975),
-    lower_ci_hiv_sud     = quantile(cost_hiv_sud, 0.025),
-    upper_ci_hiv_sud     = quantile(cost_hiv_sud, 0.975),
+    lower_ci_neither     = quantile(cost_neither, 0.025, na.rm = TRUE),
+    upper_ci_neither     = quantile(cost_neither, 0.975, na.rm = TRUE),
+    lower_ci_hiv_only    = quantile(cost_hiv_only, 0.025, na.rm = TRUE),
+    upper_ci_hiv_only    = quantile(cost_hiv_only, 0.975, na.rm = TRUE),
+    lower_ci_sud_only    = quantile(cost_sud_only, 0.025, na.rm = TRUE),
+    upper_ci_sud_only    = quantile(cost_sud_only, 0.975, na.rm = TRUE),
+    lower_ci_hiv_sud     = quantile(cost_hiv_sud, 0.025, na.rm = TRUE),
+    upper_ci_hiv_sud     = quantile(cost_hiv_sud, 0.975, na.rm = TRUE),
     
     mean_delta_hiv_only   = mean(delta_hiv_only, na.rm=TRUE),
     mean_delta_sud_only   = mean(delta_sud_only, na.rm=TRUE),
     mean_delta_hiv_sud    = mean(delta_hiv_sud, na.rm=TRUE),
     
-    lower_ci_delta_hiv_only   = quantile(delta_hiv_only, 0.025),
-    upper_ci_delta_hiv_only   = quantile(delta_hiv_only, 0.975),
-    lower_ci_delta_sud_only   = quantile(delta_sud_only, 0.025),
-    upper_ci_delta_sud_only   = quantile(delta_sud_only, 0.975),
-    lower_ci_delta_hiv_sud    = quantile(delta_hiv_sud, 0.025),
-    upper_ci_delta_hiv_sud    = quantile(delta_hiv_sud, 0.975),
+    lower_ci_delta_hiv_only   = quantile(delta_hiv_only, 0.025, na.rm = TRUE),
+    upper_ci_delta_hiv_only   = quantile(delta_hiv_only, 0.975, na.rm = TRUE),
+    lower_ci_delta_sud_only   = quantile(delta_sud_only, 0.025, na.rm = TRUE),
+    upper_ci_delta_sud_only   = quantile(delta_sud_only, 0.975, na.rm = TRUE),
+    lower_ci_delta_hiv_sud    = quantile(delta_hiv_sud, 0.025, na.rm = TRUE),
+    upper_ci_delta_hiv_sud    = quantile(delta_hiv_sud, 0.975, na.rm = TRUE),
     .groups = "drop"
   ) %>%
   left_join(df_bins_summary, by = c("acause_lvl2", "race_cd", "age_group_years_start", "toc_fact"))
@@ -334,7 +335,19 @@ df_summary <- df_summary[, desired_order]
 ## 6. Save to CSV
 ##----------------------------------------------------------------
 
-# Write to CSV
+# Add in year_id to df_bins_summary
+df_bins_summary <- df_bins_summary %>%
+  mutate(
+    year_id = year_id,
+    file_type = file_type)
+
+# Write df_bin_summary to CSV
+file_out <- generate_filename("bin_summary", ".csv")
+out_path <- file.path(bin_summary_output_folder, file_out)
+write.csv(df_bins_summary, out_path, row.names = FALSE)
+cat("Wrote final CSV to:", out_path, "\n")
+
+# Write df_summary to CSV
 file_out <- generate_filename("bootstrap_marginal_results", ".csv")
 out_path <- file.path(bootstrap_results_output_folder, file_out)
 write.csv(df_summary, out_path, row.names = FALSE)
