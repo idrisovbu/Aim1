@@ -1,10 +1,12 @@
 ##----------------------------------------------------------------
-##' Title: B3_aggregation_summary.R
+##' Title: B3_aggregator.R
 ##'
-##' Purpose: Aggregates the outputs from the B2 scripts (output folders 01, 02, 03, 04)
+##' Purpose: Aggregates the outputs from the B2 scripts (output folders 01, 02 (unused ATM), 03, 04) and creates summary files
 ##' 
-##' Outputs: 
-##
+##' Outputs: /mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/05.Aggregation_Summary/<date>/01.Summary_Statistics_inflation_adjusted_aggregated.csv
+##           /mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/05.Aggregation_Summary/<date>/03.Meta_Statistics_aggregated.csv
+##           /mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/05.Aggregation_Summary/<date>/03.Meta_Statistics_total_bene_by_year.csv
+##           /mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/05.Aggregation_Summary/<date>/03.Meta_Statistics_total_bene_by_year_by_toc.csv
 ##----------------------------------------------------------------
 
 ##----------------------------------------------------------------
@@ -48,6 +50,7 @@ base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis"
 input_summary_stats <- file.path(base_dir, "01.Summary_Statistics", date_of_input)
 input_regression_estimates <- file.path(base_dir, "02.Regression_Estimates", date_of_input)
 input_meta_stats <- file.path(base_dir, "03.Meta_Statistics", date_of_input) 
+input_two_part <- file.path(base_dir, "04.Two_Part_Estimates", date_of_input, "bootstrap_results")
 
 # Define output directory
 date_of_output <- format(Sys.time(), "%Y%m%d")
@@ -194,5 +197,126 @@ write_csv(total_bene_by_year, output_file_by_year)
 output_file_by_year_toc <- file.path(output_folder, "03.Meta_Statistics_total_bene_by_year_by_toc.csv")
 write_csv(total_bene_by_year_toc, output_file_by_year_toc)
 
+##----------------------------------------------------------------
+## 4. Aggregate & Summarize - 04.Two_Part_Estimates
+##----------------------------------------------------------------
 
+##----------------------------------------------------------------
+## 4.1 Read in data
+##----------------------------------------------------------------
 
+# Get the list of all CSV files from the input directory
+files_list_tpe <- list.files(input_two_part, pattern = "\\.csv$", full.names = TRUE) 
+
+# Read files
+df_input_tpe <- map_dfr(files_list_tpe, ~read_csv(.x, show_col_types = FALSE))
+
+##----------------------------------------------------------------
+## 4.2 Summarize results: Compute mean incremental cost per disease and HIV status
+##----------------------------------------------------------------
+
+# Filter to match your df_input years
+years_present_tpe <- sort(unique(df_input_tpe$year_id))
+inflation_data_tpe <- inflation_raw %>%
+  filter(year_id %in% years_present) %>%
+  arrange(year_id) %>%
+  mutate(
+    inflation_factor = cumprod(1 + inflation_rate),
+    deflator = inflation_factor / inflation_factor[year_id == 2019]  # normalize to 2019 dollars
+  ) %>%
+  select(year_id, deflator)
+
+# Merge and adjust costs
+cost_columns <- c(
+  "mean_cost",        "lower_ci",        "upper_ci",
+  "mean_cost_hiv",    "lower_ci_hiv",    "upper_ci_hiv",
+  "mean_cost_sud",    "lower_ci_sud",    "upper_ci_sud",
+  "mean_cost_hiv_sud","lower_ci_hiv_sud","upper_ci_hiv_sud",
+  "mean_delta_hiv",   "lower_ci_delta_hiv",   "upper_ci_delta_hiv",
+  "mean_delta_sud",   "lower_ci_delta_sud",   "upper_ci_delta_sud",
+  "mean_delta_hiv_sud", "lower_ci_delta_hiv_sud", "upper_ci_delta_hiv_sud"
+)
+
+# Divide by the deflator value for the corresponding row
+df_input_tpe_adj <- df_input_tpe %>%
+  left_join(inflation_data, by = "year_id") %>%
+  mutate(across(all_of(cost_columns), ~ . / deflator))
+
+# Load and clean the mapping file
+df_map <- read_csv("/mnt/share/dex/us_county/maps/causelist_figures.csv", show_col_types = FALSE) %>%
+  select(acause, acause_lvl2, cause_name_lvl2, acause_lvl1, cause_name_lvl1) %>%
+  mutate(
+    acause_lvl2      = if_else(acause == "hiv", "hiv", acause_lvl2),
+    cause_name_lvl2  = if_else(acause == "hiv", "HIV/AIDS", cause_name_lvl2),
+    acause_lvl2      = if_else(acause == "std", "std", acause_lvl2),
+    cause_name_lvl2  = if_else(acause == "std", "Sexually transmitted infections", cause_name_lvl2)
+  ) %>% select(-acause) %>% unique()
+
+# Join with df_map (cause map table)
+master_table_tpe <- df_input_tpe_adj %>%
+  left_join(df_map, by = "acause_lvl2") %>%
+  relocate(acause_lvl2, cause_name_lvl2, acause_lvl1, cause_name_lvl1, .before = year_id)
+
+##----------------------------------------------------------------
+## 4.3 Save aggregated master table Two Part Estimates to CSV
+##----------------------------------------------------------------
+
+# Save the aggregated results
+output_file_tpe <- file.path(output_folder, "04.Two_Part_Estimates_inflation_adjusted_aggregated.csv")
+write_csv(df_input_tpe, output_file_tpe)
+cat("table saved", output_file_tpe, "\n")
+
+##----------------------------------------------------------------
+## 4.4 Create subtables from main aggregated TPE table
+##----------------------------------------------------------------
+
+# Helper function to calculate weighted means
+weighted_mean_all <- function(df, group_cols, value_cols, weight_col) {
+  df %>%
+    group_by(across(all_of(group_cols))) %>%
+    summarise(across(all_of(value_cols), 
+                     ~ weighted.mean(.x, get(weight_col), na.rm = TRUE),
+                     .names = "{.col}"),
+    total_bin_count = sum(.data[[weight_col]], na.rm = TRUE),
+    .groups = "drop")
+}
+
+# Columns to *always* include in the grouping
+cause_cols <- c("acause_lvl1", "cause_name_lvl1", "acause_lvl2", "cause_name_lvl2")
+
+# Value columns
+value_cols <- c(
+  "mean_cost","lower_ci","upper_ci",
+  "mean_cost_hiv","lower_ci_hiv","upper_ci_hiv",
+  "mean_cost_sud","lower_ci_sud","upper_ci_sud",
+  "mean_cost_hiv_sud","lower_ci_hiv_sud","upper_ci_hiv_sud",
+  "mean_delta_hiv","lower_ci_delta_hiv","upper_ci_delta_hiv",
+  "mean_delta_sud","lower_ci_delta_sud","upper_ci_delta_sud",
+  "mean_delta_hiv_sud","lower_ci_delta_hiv_sud","upper_ci_delta_hiv_sud"
+)
+
+# By cause (Level 2 + Level 1)
+by_cause <- weighted_mean_all(master_table_tpe, cause_cols, value_cols, "total_row_count")
+write_csv(by_cause, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_cause.csv"))
+
+# By year (preserving both cause levels)
+by_year <- weighted_mean_all(master_table_tpe, c(cause_cols, "year_id"), value_cols, "total_row_count")
+write_csv(by_year, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_year.csv"))
+
+# By type of care (preserving both cause levels)
+by_toc <- weighted_mean_all(master_table_tpe, c(cause_cols, "toc"), value_cols, "total_row_count")
+write_csv(by_toc, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_toc.csv"))
+
+# By race (preserving both cause levels)
+by_race <- weighted_mean_all(master_table_tpe, c(cause_cols, "race_cd"), value_cols, "total_row_count")
+write_csv(by_race, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_race.csv"))
+
+# By age group (preserving both cause levels)
+by_age <- weighted_mean_all(master_table_tpe, c(cause_cols, "age_group_years_start"), value_cols, "total_row_count")
+write_csv(by_age, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_age.csv"))
+
+# Example: By cause and year (joint stratification, cause levels always present)
+by_cause_year <- weighted_mean_all(master_table_tpe, c(cause_cols, "year_id"), value_cols, "total_row_count")
+write_csv(by_cause_year, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_cause_year.csv"))
+
+cat("All subtables (with cause levels preserved) have been saved to CSV in ", output_folder, "\n")
