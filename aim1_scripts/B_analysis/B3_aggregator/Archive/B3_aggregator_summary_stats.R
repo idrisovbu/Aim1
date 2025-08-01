@@ -1,13 +1,16 @@
 ##----------------------------------------------------------------
-##' Title: B3_aggregator_summary_weighted_inflation.R
+##' Title: B3_aggregator_meta_stats.R
 ##'
+##' Purpose:
+##
 ##----------------------------------------------------------------
+# Environment setup
 rm(list = ls())
 pacman::p_load(dplyr, openxlsx, RMySQL, data.table, ini, DBI, tidyr, openxlsx,readr,purrr)
 library(lbd.loader, lib.loc = sprintf("/share/geospatial/code/geospatial-libraries/lbd.loader-%s", R.version$major))
 if("dex.dbr"%in% (.packages())) detach("package:dex.dbr", unload=TRUE)
 library(dex.dbr, lib.loc = lbd.loader::pkg_loc("dex.dbr"))
-suppressMessages(lbd.loader::load.containing.package())
+suppressMessages(devtools::load_all(path = "/ihme/homes/idrisov/repo/dex_us_county/"))
 
 # Set drive paths
 if (Sys.info()["sysname"] == 'Linux'){
@@ -23,6 +26,34 @@ if (Sys.info()["sysname"] == 'Linux'){
   h <- "H:/"
   l <- 'L:/'
 }
+
+##----------------------------------------------------------------
+## 0. Create directory folders 
+##----------------------------------------------------------------
+# Ensure the output directory exists
+ensure_dir_exists <- function(dir_path) {
+  if (!dir.exists(dir_path)) {
+    dir.create(dir_path, recursive = TRUE)
+  }
+}
+
+# Defined manually
+date_of_input <- "bested" # bested from 20250631
+base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis"
+
+# Define input directory 
+input_meta_stats <- file.path(base_dir, "03.Meta_Statistics", date_of_input) 
+
+# Define output directory
+date_of_output <- format(Sys.time(), "%Y%m%d")
+
+output_folder <- file.path(base_dir, "05.Aggregation_Summary", date_of_output, "aggregation_meta_stats_results")
+subtable_output_folder <- file.path(base_dir, "05.Aggregation_Summary", date_of_output, "aggregation_meta_subtable_results")
+
+ensure_dir_exists(output_folder)
+ensure_dir_exists(subtable_output_folder)
+
+
 
 ###########
 #defined manually

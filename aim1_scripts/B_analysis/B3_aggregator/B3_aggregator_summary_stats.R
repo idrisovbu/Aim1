@@ -1,13 +1,16 @@
 ##----------------------------------------------------------------
-##' Title: B3_aggregator_summary_weighted_inflation.R
+##' Title: B3_aggregator_meta_stats.R
 ##'
+##' Purpose:
+##
 ##----------------------------------------------------------------
+# Environment setup
 rm(list = ls())
 pacman::p_load(dplyr, openxlsx, RMySQL, data.table, ini, DBI, tidyr, openxlsx,readr,purrr)
 library(lbd.loader, lib.loc = sprintf("/share/geospatial/code/geospatial-libraries/lbd.loader-%s", R.version$major))
 if("dex.dbr"%in% (.packages())) detach("package:dex.dbr", unload=TRUE)
 library(dex.dbr, lib.loc = lbd.loader::pkg_loc("dex.dbr"))
-suppressMessages(lbd.loader::load.containing.package())
+suppressMessages(devtools::load_all(path = "/ihme/homes/idrisov/repo/dex_us_county/"))
 
 # Set drive paths
 if (Sys.info()["sysname"] == 'Linux'){
@@ -24,26 +27,9 @@ if (Sys.info()["sysname"] == 'Linux'){
   l <- 'L:/'
 }
 
-###########
-#defined manually
-date_of_input <- "20250523"
-base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis"
-
-
-# Define input directory 
-input_summary_folder <- file.path(base_dir, date_of_input, "01.Summary_Statistics") 
-input_regrs_folder <- file.path(base_dir, date_of_input, "02.Regression_Estimates") 
-input_meta_folder <- file.path(base_dir, date_of_input, "03.Meta_Statistics") 
-
-
-# Define output directory
-output_folder <- file.path(base_dir, date_of_input, "Agregators")
-#figures_folder <- file.path(output_folder, "figures")
-
-
-dir.create(output_folder, recursive = TRUE, showWarnings = FALSE)
-#dir.create(figures_folder, recursive = TRUE, showWarnings = FALSE)
-
+##----------------------------------------------------------------
+## 0. Create directory folders 
+##----------------------------------------------------------------
 # Ensure the output directory exists
 ensure_dir_exists <- function(dir_path) {
   if (!dir.exists(dir_path)) {
@@ -51,53 +37,39 @@ ensure_dir_exists <- function(dir_path) {
   }
 }
 
+# Defined manually
+date_of_input <- "bested" # bested from 20250631
+base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis"
+
+# Define input directory 
+input_summary_stats <- file.path(base_dir, "01.Summary_Statistics", date_of_input) 
+
+# Define output directory
+date_of_output <- format(Sys.time(), "%Y%m%d")
+
+output_folder <- file.path(base_dir, "05.Aggregation_Summary", date_of_output, "aggregation_summary_stats_results")
+
+ensure_dir_exists(output_folder)
+
+
+
+##----------------------------------------------------------------
+## 1. Read in data
+##----------------------------------------------------------------
 
 # Get the list of all CSV files from the input directory
-files_list_sum <- list.files(input_summary_folder, pattern = "\\.csv$", full.names = TRUE) 
-files_list_regr <- list.files(input_regrs_folder, pattern = "\\.csv$", full.names = TRUE) 
-files_list_meta <- list.files(input_meta_folder, pattern = "\\.csv$", full.names = TRUE) 
+files_list <- list.files(input_summary_stats, pattern = "\\.csv$", full.names = TRUE) 
 
-##########################################
-# 1. Read in all CSV files
-##########################################
-
-# Read and tag files
-df_meta <- map_dfr(files_list_meta, ~read_csv(.x, show_col_types = FALSE) %>%
-                    mutate(source = "meta"))
+# Read files
+df_input <- map_dfr(files_list, ~read_csv(.x, show_col_types = FALSE))
 
 
 
-# Save raw aggregated master file
-write_csv(df_meta, file.path(output_folder, "agregated_meta_table.csv"))
+##----------------------------------------------------------------
+## 2. Inflation adjustment
+##----------------------------------------------------------------
 
-summary(df_meta )
-
-##########
-##########
-# Read and tag files
-df_sum <- map_dfr(files_list_sum, ~read_csv(.x, show_col_types = FALSE) %>%
-                     mutate(source = "summary"))
-
-
-
-
-# Save raw aggregated master file
-write_csv(df_sum, file.path(output_folder, "agregated_summary_table.csv"))
-
-
-##########
-##########
-
-df_regr <- map_dfr(files_list_regr, ~read_csv(.x, show_col_types = FALSE) %>%
-                     mutate(source = "reg"))
-# Save raw aggregated master file
-write_csv(df_sum, file.path(output_folder, "agregated_regression_table.csv"))
-
-
-
-
-##########
-
+df_sum <- df_input
 # Inflation adjustment setup
 inflation_raw <- data.frame(
   year_id = 2008:2024,
@@ -140,6 +112,39 @@ summary_table <- df_adj %>%
 # Save
 write_csv(summary_table, file.path(output_folder, "weighted_summary_table.csv"))
 cat("✅ Inflation-adjusted summary table saved to:", file.path(output_folder, "feighted_summary_table.csv"), "\n")
+
+
+##########
+
+
+
+
+##----------------------------------------------------------------
+##  Saving files
+##----------------------------------------------------------------
+
+
+# Save the aggregated results
+output_file <- file.path(output_folder, "meta_statistics.csv")
+write_csv(df_input, output_file)
+cat("table saved", output_file, "\n")
+
+
+
+
+
+
+
+
+##########
+##########
+# 
+# df_regr <- map_dfr(files_list_regr, ~read_csv(.x, show_col_types = FALSE) %>%
+#                      mutate(source = "reg"))
+# # Save raw aggregated master file
+# write_csv(df_sum, file.path(output_folder, "agregated_regression_table.csv"))
+# 
+
 
 
 ##########

@@ -38,7 +38,7 @@ ensure_dir_exists <- function(dir_path) {
 }
 
 # Defined manually
-date_of_input <- "bested" # bested from 20250629
+date_of_input <- "bested" # bested from 20250631
 base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis"
 
 # Define input directory 
@@ -74,7 +74,10 @@ cat("table saved", output_file, "\n")
 # examine toc per year combo interactively
 ######
 
-summary(df_input)
+# The code below summarizes the analytic sample by year and type of care.
+# It lists the unique types of care available each year, the number of unique beneficiaries per year,
+# and produces a table showing beneficiary counts for each type of care and year.
+#such as this table https://docs.google.com/document/d/1o6e8yvv1kW4mf7Be5F667b9mMOmA-O4G9TF5XKGFH_k/edit?usp=sharing
 
 df_input %>%
   count(year_id, toc, name = "toc_count") %>%
