@@ -127,8 +127,6 @@ df_adj_ss <- deflate(
 )
 
 
-summary(df_adj_ss)
-
 # Create weighted summary table
 summary_table <- df_adj_ss %>%
   group_by(acause_lvl2, has_hiv, has_sud, has_hepc, race_cd, toc, age_group_years_start, year_id, file_type) %>%
@@ -147,9 +145,170 @@ summary_table <- df_adj_ss %>%
 write_csv(summary_table, file.path(output_folder, "01.Summary_Statistics_inflation_adjusted_aggregated.csv"))
 cat("inflation-adjusted summary table saved to:", file.path(output_folder, "01.Summary_Statistics_inflation_adjusted_aggregated.csv"), "\n")
 
+#### subtables
+
+# Only numeric columns!
+value_cols <- c(
+  "has_hiv", "has_sud", "has_hepc", "avg_cost_per_bene", "max_cost_per_bene",
+  "quantile_99_cost_per_bene", "sum_cost_per_group", "n_benes_per_group",
+  "avg_encounters_per_bene", "sum_encounters_per_group"
+)
+
+
+by_cause_ss <- weighted_mean_all(df = df_adj_ss,group_cols = "acause_lvl2", value_cols = value_cols,weight_col = "n_benes_per_group")
+
+by_year_ss <- weighted_mean_all(df = df_adj_ss,group_cols = "year_id",value_cols = value_cols,weight_col = "n_benes_per_group")
+
+by_toc_ss <- weighted_mean_all(
+  df = df_adj_ss,
+  group_cols = "toc",
+  value_cols = value_cols,
+  weight_col = "n_benes_per_group"
+)
+
+by_race_ss <- weighted_mean_all(
+  df = df_adj_ss,
+  group_cols = "race_cd",
+  value_cols = value_cols,
+  weight_col = "n_benes_per_group"
+)
+
+by_age_ss <- weighted_mean_all(
+  df = df_adj_ss,
+  group_cols = "age_group_years_start",
+  value_cols = value_cols,
+  weight_col = "n_benes_per_group"
+)
+
+by_cause_year_ss <- weighted_mean_all(
+  df = df_adj_ss,
+  group_cols = c("acause_lvl2", "year_id"),
+  value_cols = value_cols,
+  weight_col = "n_benes_per_group"
+)
+
+write_csv(by_cause_ss,      file.path(output_folder, "01.Summary_Statistics_subtable_by_cause.csv"))
+write_csv(by_year_ss,       file.path(output_folder, "01.Summary_Statistics_subtable_by_year.csv"))
+write_csv(by_toc_ss,        file.path(output_folder, "01.Summary_Statistics_subtable_by_toc.csv"))
+write_csv(by_race_ss,       file.path(output_folder, "01.Summary_Statistics_subtable_by_race.csv"))
+write_csv(by_age_ss,        file.path(output_folder, "01.Summary_Statistics_subtable_by_age.csv"))
+write_csv(by_cause_year_ss, file.path(output_folder, "01.Summary_Statistics_subtable_by_cause_year.csv"))
+
+cat("All descriptive summary subtables have been saved to CSV in", output_folder, "\n")
+
+
 ##----------------------------------------------------------------
 ## 2. Aggregate & Summarize - 02.Regression_Estimates
 ##----------------------------------------------------------------
+
+##----------------------------------------------------------------
+
+# Get the list of all CSV files from the input directory
+files_list_re <- list.files(input_regression_estimates, pattern = "\\.csv$", full.names = TRUE) 
+
+# Read and combine all files into a single dataframe
+df_input_re <- purrr::map_dfr(files_list_re, ~readr::read_csv(.x, show_col_types = FALSE))
+
+# Save the aggregated Regression Estimates as CSV
+output_file_re <- file.path(output_folder, "02.Regression_Estimates_aggregated.csv")
+write_csv(df_input_re, output_file_re)
+cat("Regression estimates table saved:", output_file_re, "\n")
+
+
+
+#  Number of significant effects by effect type
+sig_counts <- df_input_re %>%
+  mutate(
+    sig_logit = !is.na(p_logit) & p_logit < 0.05,
+    sig_gamma = !is.na(p_gamma) & p_gamma < 0.05,
+    is_interaction = grepl(":", variable)
+  ) %>%
+  group_by(is_interaction) %>%
+  summarise(
+    n = n(),
+    n_sig_logit = sum(sig_logit, na.rm = TRUE),
+    n_sig_gamma = sum(sig_gamma, na.rm = TRUE)
+  )
+write_csv(sig_counts, file.path(output_folder, "02.Regression_Estimates_subtable_sig_counts.csv"))
+
+
+
+# Coverage table by year and age group
+estimate_count <- df_input_re %>% count(year_id, age_group_years_start, name = "n_estimates")
+write_csv(estimate_count, file.path(output_folder, "02.Regression_Estimates_subtable_n_estimates_by_year_age.csv"))
+
+estimate_signif <- df_input_re %>%
+  group_by(year_id, age_group_years_start) %>%
+  summarise(
+    n_estimates = n(),
+    n_sig_logit = sum(!is.na(p_logit) & p_logit < 0.05, na.rm = TRUE),
+    n_sig_gamma = sum(!is.na(p_gamma) & p_gamma < 0.05, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+write_csv(estimate_signif, file.path(output_folder, "02.Regression_Estimates_subtable_n_estimates_signif_by_year_age.csv"))
+
+
+# Add significance flags to your data
+df_input_re <- df_input_re %>%
+  mutate(
+    sig_logit = !is.na(p_logit) & p_logit < 0.05,
+    sig_gamma = !is.na(p_gamma) & p_gamma < 0.05
+  )
+
+
+#  By cause only
+by_cause <- df_input_re %>%
+  group_by(variable) %>%
+  summarise(
+    n_estimates = n(),
+    prop_sig_logit = mean(sig_logit, na.rm = TRUE),
+    prop_sig_gamma = mean(sig_gamma, na.rm = TRUE),
+    .groups = "drop"
+  )
+write_csv(by_cause, file.path(output_folder, "02.Regression_Estimates_subtable_sig_by_cause.csv"))
+
+colnames(df_input_re)
+unique(df_input_re$variable)
+
+by_toc <- df_input_re %>%
+  filter(grepl("^toc_fact", variable)) %>%
+  group_by(variable) %>%
+  summarise(
+    n_estimates = n(),
+    prop_sig_logit = mean(sig_logit, na.rm = TRUE),
+    prop_sig_gamma = mean(sig_gamma, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+write_csv(by_toc, file.path(output_folder, "02.Regression_Estimates_subtable_sig_by_toc.csv"))
+
+
+#  By age group only
+by_age <- df_input_re %>%
+  group_by(age_group_years_start) %>%
+  summarise(
+    n_estimates = n(),
+    prop_sig_logit = mean(sig_logit, na.rm = TRUE),
+    prop_sig_gamma = mean(sig_gamma, na.rm = TRUE),
+    .groups = "drop"
+  )
+write_csv(by_age, file.path(output_folder, "02.Regression_Estimates_subtable_sig_by_age_group.csv"))
+
+# By year only
+by_year <- df_input_re %>%
+  group_by(year_id) %>%
+  summarise(
+    n_estimates = n(),
+    prop_sig_logit = mean(sig_logit, na.rm = TRUE),
+    prop_sig_gamma = mean(sig_gamma, na.rm = TRUE),
+    .groups = "drop"
+  )
+write_csv(by_year, file.path(output_folder, "02.Regression_Estimates_subtable_sig_by_year.csv"))
+
+cat("All regression significance sub-tables saved in", output_folder, "\n")
+
+
 
 
 ##----------------------------------------------------------------
@@ -203,11 +362,11 @@ total_bene_by_year_toc <- df_input_ms %>%
 ##----------------------------------------------------------------
 
 # Save total unique beneficiaries by year
-output_file_by_year <- file.path(output_folder, "03.Meta_Statistics_total_bene_by_year.csv")
+output_file_by_year <- file.path(output_folder, "03.Meta_Statistics_subtable_bene_by_year.csv")
 write_csv(total_bene_by_year, output_file_by_year)
 
 # Save total unique beneficiaries by year and toc
-output_file_by_year_toc <- file.path(output_folder, "03.Meta_Statistics_total_bene_by_year_by_toc.csv")
+output_file_by_year_toc <- file.path(output_folder, "03.Meta_Statistics_subtable_bene_by_year_by_toc.csv")
 write_csv(total_bene_by_year_toc, output_file_by_year_toc)
 
 ##----------------------------------------------------------------
@@ -228,7 +387,6 @@ df_input_tpe <- map_dfr(files_list_tpe, ~read_csv(.x, show_col_types = FALSE))
 ## 4.2 Inflation adjustment and mapping 
 ##----------------------------------------------------------------
 
-colnames(df_input_tpe)
 # cost column to adjust for inflation
 
 cost_columns <- c(
@@ -346,6 +504,5 @@ write_csv(by_cause_year, file.path(output_folder, "04.Two_Part_Estimates_subtabl
 
 cat("All subtables (with cause levels preserved) have been saved to CSV in ", output_folder, "\n")
 
-colnames(df_adj_ss)
 
 
