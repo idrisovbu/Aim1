@@ -35,7 +35,7 @@ if (Sys.info()["sysname"] == 'Linux'){
 }
 
 ##----------------------------------------------------------------
-## 1. Create directory folders 
+## 0. Create directory folders 
 ##----------------------------------------------------------------
 # Ensure the output directory exists
 ensure_dir_exists <- function(dir_path) {
@@ -60,11 +60,11 @@ output_folder <- file.path(base_dir, "05.Aggregation_Summary", date_of_output)
 ensure_dir_exists(output_folder)
 
 ##----------------------------------------------------------------
-## 2. Aggregate & Summarize - 01.Summary_Statistics
+## 1. Aggregate & Summarize - 01.Summary_Statistics
 ##----------------------------------------------------------------
 
 ##----------------------------------------------------------------
-## 2.1 Read in Data
+## 1.1 Read in Data
 ##----------------------------------------------------------------
 
 # Get the list of all CSV files from the input directory
@@ -74,51 +74,23 @@ files_list_ss <- list.files(input_summary_stats, pattern = "\\.csv$", full.names
 df_input_ss <- map_dfr(files_list_ss, ~read_csv(.x, show_col_types = FALSE))
 
 ##----------------------------------------------------------------
-## 2.2 Inflation adjustment
+## 1.2 Inflation adjustment
 ##----------------------------------------------------------------
-
-# Inflation adjustment setup
-inflation_raw <- data.frame(
-  year_id = c(2000, 2008:2024),
-  inflation_rate = c(
-    0.0334,   # 2000: approximated 3.34%
-    0.001,    # 2008
-    -0.004,   # 2009
-    0.016,    # 2010
-    0.017,    # 2011
-    0.015,    # 2012
-    0.008,    # 2013
-    0.007,    # 2014
-    0.021,    # 2015
-    0.021,    # 2016
-    0.019,    # 2017
-    0.023,    # 2018
-    0.014,    # 2019
-    0.070,    # 2020 (if you originally had 7%)
-    0.065,    # 2021
-    0.034,    # 2022 (or your previous)
-    0.041,    # 2023
-    0.029     # 2024
-  )
-) # Source https://www.bls.gov/cpi/tables/supplemental-files/historical-cpi-u-202404.pdf
-
-# Create deflators based on years in data
-years_present <- sort(unique(df_input_ss$year_id))
-inflation_data <- inflation_raw %>%
-  filter(year_id %in% years_present) %>%
-  arrange(year_id) %>%
-  mutate(
-    inflation_factor = cumprod(1 + inflation_rate),
-    deflator = inflation_factor / inflation_factor[year_id == 2019]
-  ) %>%
-  select(year_id, deflator)
+## note DEX helper function is described in z.utilities folder: /Aim1/aim1_scripts/Z_utilities/deflate.R
+#The function converts monetary values from any year to a common reference year (e.g., 2019 USD)
+##' using the Consumer Price Index (CPI-U) for inflation adjustment.
+# Source of  CPI https://www.bls.gov/cpi/tables/supplemental-files/historical-cpi-u-202404.pdf
 
 # Adjust cost variables
 cost_columns <- c("avg_cost_per_bene", "quantile_99_cost_per_bene", "max_cost_per_bene", "sum_cost_per_group")
 
-df_adj_ss <- df_input_ss %>%
-  left_join(inflation_data, by = "year_id") %>%
-  mutate(across(all_of(cost_columns), ~ .x / deflator))
+df_adj_ss <- deflate(
+  data = df_input_ss,
+  val_columns = cost_columns,
+  old_year = "year_id",
+  new_year = 2019
+)
+
 
 # Create weighted summary table
 summary_table <- df_adj_ss %>%
@@ -136,7 +108,11 @@ summary_table <- df_adj_ss %>%
 
 # Save
 write_csv(summary_table, file.path(output_folder, "01.Summary_Statistics_inflation_adjusted_aggregated.csv"))
-cat("✅ Inflation-adjusted summary table saved to:", file.path(output_folder, "01.Summary_Statistics_inflation_adjusted_aggregated.csv"), "\n")
+cat("inflation-adjusted summary table saved to:", file.path(output_folder, "01.Summary_Statistics_inflation_adjusted_aggregated.csv"), "\n")
+
+##----------------------------------------------------------------
+## 2. Aggregate & Summarize - 02.Regression_Estimates
+##----------------------------------------------------------------
 
 
 ##----------------------------------------------------------------
@@ -212,21 +188,12 @@ files_list_tpe <- list.files(input_two_part, pattern = "\\.csv$", full.names = T
 df_input_tpe <- map_dfr(files_list_tpe, ~read_csv(.x, show_col_types = FALSE))
 
 ##----------------------------------------------------------------
-## 4.2 Summarize results: Compute mean incremental cost per disease and HIV status
+## 4.2 Inflation adjustment and mapping 
 ##----------------------------------------------------------------
 
-# Filter to match your df_input years
-years_present_tpe <- sort(unique(df_input_tpe$year_id))
-inflation_data_tpe <- inflation_raw %>%
-  filter(year_id %in% years_present) %>%
-  arrange(year_id) %>%
-  mutate(
-    inflation_factor = cumprod(1 + inflation_rate),
-    deflator = inflation_factor / inflation_factor[year_id == 2019]  # normalize to 2019 dollars
-  ) %>%
-  select(year_id, deflator)
+colnames(df_input_tpe)
+# cost column to adjust for inflation
 
-# Merge and adjust costs
 cost_columns <- c(
   "mean_cost",        "lower_ci",        "upper_ci",
   "mean_cost_hiv",    "lower_ci_hiv",    "upper_ci_hiv",
@@ -237,10 +204,14 @@ cost_columns <- c(
   "mean_delta_hiv_sud", "lower_ci_delta_hiv_sud", "upper_ci_delta_hiv_sud"
 )
 
-# Divide by the deflator value for the corresponding row
-df_input_tpe_adj <- df_input_tpe %>%
-  left_join(inflation_data, by = "year_id") %>%
-  mutate(across(all_of(cost_columns), ~ . / deflator))
+
+df_input_tpe <- deflate(
+  data = df_input_tpe,
+  val_columns = cost_columns,
+  old_year = "year_id",
+  new_year = 2019
+)
+
 
 # Load and clean the mapping file
 df_map <- read_csv("/mnt/share/dex/us_county/maps/causelist_figures.csv", show_col_types = FALSE) %>%
@@ -253,12 +224,12 @@ df_map <- read_csv("/mnt/share/dex/us_county/maps/causelist_figures.csv", show_c
   ) %>% select(-acause) %>% unique()
 
 # Join with df_map (cause map table)
-master_table_tpe <- df_input_tpe_adj %>%
+df_input_tpe <- df_input_tpe %>%
   left_join(df_map, by = "acause_lvl2") %>%
   relocate(acause_lvl2, cause_name_lvl2, acause_lvl1, cause_name_lvl1, .before = year_id)
 
 ##----------------------------------------------------------------
-## 4.3 Save aggregated master table Two Part Estimates to CSV
+## 4.3 Save adjusted table Two Part Estimates to CSV
 ##----------------------------------------------------------------
 
 # Save the aggregated results
@@ -267,7 +238,7 @@ write_csv(df_input_tpe, output_file_tpe)
 cat("table saved", output_file_tpe, "\n")
 
 ##----------------------------------------------------------------
-## 4.4 Create subtables from main aggregated TPE table
+## 4.4 Create sub-tables from main aggregated TPE table
 ##----------------------------------------------------------------
 
 # Helper function to calculate weighted means
@@ -321,4 +292,6 @@ write_csv(by_cause_year, file.path(output_folder, "04.Two_Part_Estimates_subtabl
 
 cat("All subtables (with cause levels preserved) have been saved to CSV in ", output_folder, "\n")
 
-##Checking 
+
+
+
