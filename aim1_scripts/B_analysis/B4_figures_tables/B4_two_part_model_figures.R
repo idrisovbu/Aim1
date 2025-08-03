@@ -28,15 +28,14 @@ input_dir <- "C:/Users/bulatidrisov/Aim1WD/aim1_Input_personal_mac"
 output_dir <- "/Users/bulatidrisov/Aim1WD/aim1_output_personal_mac"
 
 ####################################
-# Set directories working on IHME enviroment
+# Set directories working on IHME environment
 ####################################
 
 ####################################
 # Input directories
 
-input_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/05.Aggregation_Summary/bested/aggregation_subtable_results"
+input_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/05.Aggregation_Summary/bested/"
 
-input_master_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/05.Aggregation_Summary/bested/aggregation_results"
 
 
 ####################################
@@ -46,7 +45,7 @@ input_master_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/05
 date_today <- format(Sys.time(), "%Y%m%d")
 
 # Define the base directory (the parent directory)
-base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/"  # Added leading slash
+base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/" 
 
 figures_dir <- file.path(base_dir, "06.Figures")
 if (!dir.exists(figures_dir)) {
@@ -453,7 +452,7 @@ hiv_percent_race <- ggplot(
   aes(
     x = reorder(cause_name_lvl2, cause_name_lvl2),
     y = percent_mean_cost_hiv,
-    fill = factor(race_cd)  # or use your recoded variable for prettier legend
+    fill = factor(race_cd)  # or use  recoded variable for prettier legend
   )
 ) +
   geom_bar(stat = "identity", position = "stack") +

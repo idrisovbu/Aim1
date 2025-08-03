@@ -93,7 +93,6 @@ weighted_mean_all <- function(df, group_cols, value_cols, weight_col) {
 }
 
 
-
 ##----------------------------------------------------------------
 ## 1. Aggregate & Summarize - 01.Summary_Statistics
 ##----------------------------------------------------------------
@@ -249,7 +248,7 @@ estimate_signif <- df_input_re %>%
 write_csv(estimate_signif, file.path(output_folder, "02.Regression_Estimates_subtable_n_estimates_signif_by_year_age.csv"))
 
 
-# Add significance flags to your data
+# Add significance flags to data
 df_input_re <- df_input_re %>%
   mutate(
     sig_logit = !is.na(p_logit) & p_logit < 0.05,
@@ -435,32 +434,6 @@ cat("table saved", output_file_tpe, "\n")
 ##----------------------------------------------------------------
 ## 4.4 Create sub-tables from main aggregated TPE table
 ##----------------------------------------------------------------
-
-
-#' #' Calculate weighted means for multiple columns within grouped strata.
-#' #'
-#' #' @param df         Input dataframe.
-#' #' @param group_cols Character vector of columns to group by (strata).
-#' #' @param value_cols Character vector of columns for which to calculate weighted means.
-#' #' @param weight_col Character; name of the column to use as weights.
-#' #'
-#' #' @return A tibble/data.frame summarizing each group with weighted means for value columns
-#' #'         and the sum of the weights (total_bin_count).
-#' #'
-#' 
-#' weighted_mean_all <- function(df, group_cols, value_cols, weight_col) {
-#'   df %>%
-#'     group_by(across(all_of(group_cols))) %>%
-#'     summarise(
-#'       across(
-#'         all_of(value_cols),
-#'         ~ weighted.mean(.x, .data[[weight_col]], na.rm = TRUE),
-#'         .names = "{.col}"
-#'       ),
-#'       total_bin_count = sum(.data[[weight_col]], na.rm = TRUE),
-#'       .groups = "drop"
-#'     )
-#' }
 
 
 
