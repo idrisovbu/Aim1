@@ -59,6 +59,41 @@ output_folder <- file.path(base_dir, "05.Aggregation_Summary", date_of_output)
 # Ensure directory exists
 ensure_dir_exists(output_folder)
 
+
+##----------------------------------------------------------------
+## Helper function to Calculate weighted means for multiple columns within grouped strata.
+##----------------------------------------------------------------
+#' @param df         Input dataframe.
+#' @param group_cols Character vector of columns to group by (strata).
+#' @param value_cols Character vector of columns for which to calculate weighted means.
+#' @param weight_col Character; name of the column to use as weights.
+#'
+#' @return A tibble/data.frame summarizing each group with weighted means for value columns
+#'         and the sum of the weights (total_bin_count).
+#'
+#' @examples
+#' result <- weighted_mean_all(
+#'   df = mydata,
+#'   group_cols = c("sex", "age_group", "year"),
+#'   value_cols = c("cost", "utilization"),
+#'   weight_col = "n_patients"
+#' )
+weighted_mean_all <- function(df, group_cols, value_cols, weight_col) {
+  df %>%
+    group_by(across(all_of(group_cols))) %>%
+    summarise(
+      across(
+        all_of(value_cols),
+        ~ weighted.mean(.x, .data[[weight_col]], na.rm = TRUE),
+        .names = "{.col}"
+      ),
+      total_bin_count = sum(.data[[weight_col]], na.rm = TRUE),
+      .groups = "drop"
+    )
+}
+
+
+
 ##----------------------------------------------------------------
 ## 1. Aggregate & Summarize - 01.Summary_Statistics
 ##----------------------------------------------------------------
@@ -91,6 +126,8 @@ df_adj_ss <- deflate(
   new_year = 2019
 )
 
+
+summary(df_adj_ss)
 
 # Create weighted summary table
 summary_table <- df_adj_ss %>%
@@ -241,16 +278,33 @@ cat("table saved", output_file_tpe, "\n")
 ## 4.4 Create sub-tables from main aggregated TPE table
 ##----------------------------------------------------------------
 
-# Helper function to calculate weighted means
-weighted_mean_all <- function(df, group_cols, value_cols, weight_col) {
-  df %>%
-    group_by(across(all_of(group_cols))) %>%
-    summarise(across(all_of(value_cols), 
-                     ~ weighted.mean(.x, get(weight_col), na.rm = TRUE),
-                     .names = "{.col}"),
-    total_bin_count = sum(.data[[weight_col]], na.rm = TRUE),
-    .groups = "drop")
-}
+
+#' #' Calculate weighted means for multiple columns within grouped strata.
+#' #'
+#' #' @param df         Input dataframe.
+#' #' @param group_cols Character vector of columns to group by (strata).
+#' #' @param value_cols Character vector of columns for which to calculate weighted means.
+#' #' @param weight_col Character; name of the column to use as weights.
+#' #'
+#' #' @return A tibble/data.frame summarizing each group with weighted means for value columns
+#' #'         and the sum of the weights (total_bin_count).
+#' #'
+#' 
+#' weighted_mean_all <- function(df, group_cols, value_cols, weight_col) {
+#'   df %>%
+#'     group_by(across(all_of(group_cols))) %>%
+#'     summarise(
+#'       across(
+#'         all_of(value_cols),
+#'         ~ weighted.mean(.x, .data[[weight_col]], na.rm = TRUE),
+#'         .names = "{.col}"
+#'       ),
+#'       total_bin_count = sum(.data[[weight_col]], na.rm = TRUE),
+#'       .groups = "drop"
+#'     )
+#' }
+
+
 
 # Columns to *always* include in the grouping
 cause_cols <- c("acause_lvl1", "cause_name_lvl1", "acause_lvl2", "cause_name_lvl2")
@@ -267,31 +321,31 @@ value_cols <- c(
 )
 
 # By cause (Level 2 + Level 1)
-by_cause <- weighted_mean_all(master_table_tpe, cause_cols, value_cols, "total_row_count")
+by_cause <- weighted_mean_all(df_input_tpe, cause_cols, value_cols, "total_row_count")
 write_csv(by_cause, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_cause.csv"))
 
 # By year (preserving both cause levels)
-by_year <- weighted_mean_all(master_table_tpe, c(cause_cols, "year_id"), value_cols, "total_row_count")
+by_year <- weighted_mean_all(df_input_tpe, c(cause_cols, "year_id"), value_cols, "total_row_count")
 write_csv(by_year, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_year.csv"))
 
 # By type of care (preserving both cause levels)
-by_toc <- weighted_mean_all(master_table_tpe, c(cause_cols, "toc"), value_cols, "total_row_count")
+by_toc <- weighted_mean_all(df_input_tpe, c(cause_cols, "toc"), value_cols, "total_row_count")
 write_csv(by_toc, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_toc.csv"))
 
 # By race (preserving both cause levels)
-by_race <- weighted_mean_all(master_table_tpe, c(cause_cols, "race_cd"), value_cols, "total_row_count")
+by_race <- weighted_mean_all(df_input_tpe, c(cause_cols, "race_cd"), value_cols, "total_row_count")
 write_csv(by_race, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_race.csv"))
 
 # By age group (preserving both cause levels)
-by_age <- weighted_mean_all(master_table_tpe, c(cause_cols, "age_group_years_start"), value_cols, "total_row_count")
+by_age <- weighted_mean_all(df_input_tpe, c(cause_cols, "age_group_years_start"), value_cols, "total_row_count")
 write_csv(by_age, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_age.csv"))
 
 # Example: By cause and year (joint stratification, cause levels always present)
-by_cause_year <- weighted_mean_all(master_table_tpe, c(cause_cols, "year_id"), value_cols, "total_row_count")
+by_cause_year <- weighted_mean_all(df_input_tpe, c(cause_cols, "year_id"), value_cols, "total_row_count")
 write_csv(by_cause_year, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_cause_year.csv"))
 
 cat("All subtables (with cause levels preserved) have been saved to CSV in ", output_folder, "\n")
 
-
+colnames(df_adj_ss)
 
 
