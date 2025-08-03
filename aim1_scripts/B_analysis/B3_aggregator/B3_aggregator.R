@@ -320,3 +320,5 @@ by_cause_year <- weighted_mean_all(master_table_tpe, c(cause_cols, "year_id"), v
 write_csv(by_cause_year, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_cause_year.csv"))
 
 cat("All subtables (with cause levels preserved) have been saved to CSV in ", output_folder, "\n")
+
+##Checking 
