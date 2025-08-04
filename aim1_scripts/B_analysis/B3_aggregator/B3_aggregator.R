@@ -7,6 +7,8 @@
 ##           /mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/05.Aggregation_Summary/<date>/03.Meta_Statistics_aggregated.csv
 ##           /mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/05.Aggregation_Summary/<date>/03.Meta_Statistics_total_bene_by_year.csv
 ##           /mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/05.Aggregation_Summary/<date>/03.Meta_Statistics_total_bene_by_year_by_toc.csv
+##
+## TODO: Add "inflation_adjusted" Y/N column to the inflation adjusted tables/ subtables
 ##----------------------------------------------------------------
 
 ##----------------------------------------------------------------
@@ -113,10 +115,10 @@ df_input_ss <- map_dfr(files_list_ss, ~read_csv(.x, show_col_types = FALSE))
 ## note DEX helper function is described in z.utilities folder: /Aim1/aim1_scripts/Z_utilities/deflate.R
 #The function converts monetary values from any year to a common reference year (e.g., 2019 USD)
 ##' using the Consumer Price Index (CPI-U) for inflation adjustment.
-# Source of  CPI https://www.bls.gov/cpi/tables/supplemental-files/historical-cpi-u-202404.pdf
+# Source of CPI https://www.bls.gov/cpi/tables/supplemental-files/historical-cpi-u-202404.pdf
 
 # Adjust cost variables
-cost_columns <- c("avg_cost_per_bene", "quantile_99_cost_per_bene", "max_cost_per_bene", "sum_cost_per_group")
+cost_columns <- c("avg_cost_per_bene", "max_cost_per_bene", "quantile_99_cost_per_bene","sum_cost_per_group")
 
 df_adj_ss <- deflate(
   data = df_input_ss,
@@ -124,7 +126,6 @@ df_adj_ss <- deflate(
   old_year = "year_id",
   new_year = 2019
 )
-
 
 # Create weighted summary table
 summary_table <- df_adj_ss %>%
@@ -144,7 +145,9 @@ summary_table <- df_adj_ss %>%
 write_csv(summary_table, file.path(output_folder, "01.Summary_Statistics_inflation_adjusted_aggregated.csv"))
 cat("inflation-adjusted summary table saved to:", file.path(output_folder, "01.Summary_Statistics_inflation_adjusted_aggregated.csv"), "\n")
 
-#### subtables
+##----------------------------------------------------------------
+## 1.3 Create Inflation Adjusted Subtables
+##----------------------------------------------------------------
 
 # Only numeric columns!
 value_cols <- c(
@@ -152,7 +155,6 @@ value_cols <- c(
   "quantile_99_cost_per_bene", "sum_cost_per_group", "n_benes_per_group",
   "avg_encounters_per_bene", "sum_encounters_per_group"
 )
-
 
 by_cause_ss <- weighted_mean_all(df = df_adj_ss,group_cols = "acause_lvl2", value_cols = value_cols,weight_col = "n_benes_per_group")
 
@@ -200,8 +202,6 @@ cat("All descriptive summary subtables have been saved to CSV in", output_folder
 ## 2. Aggregate & Summarize - 02.Regression_Estimates
 ##----------------------------------------------------------------
 
-##----------------------------------------------------------------
-
 # Get the list of all CSV files from the input directory
 files_list_re <- list.files(input_regression_estimates, pattern = "\\.csv$", full.names = TRUE) 
 
@@ -213,7 +213,9 @@ output_file_re <- file.path(output_folder, "02.Regression_Estimates_aggregated.c
 write_csv(df_input_re, output_file_re)
 cat("Regression estimates table saved:", output_file_re, "\n")
 
-
+##----------------------------------------------------------------
+## 2.1 Regression Subtables
+##----------------------------------------------------------------
 
 #  Number of significant effects by effect type
 sig_counts <- df_input_re %>%
@@ -229,8 +231,6 @@ sig_counts <- df_input_re %>%
     n_sig_gamma = sum(sig_gamma, na.rm = TRUE)
   )
 write_csv(sig_counts, file.path(output_folder, "02.Regression_Estimates_subtable_sig_counts.csv"))
-
-
 
 # Coverage table by year and age group
 estimate_count <- df_input_re %>% count(year_id, age_group_years_start, name = "n_estimates")
@@ -306,8 +306,6 @@ by_year <- df_input_re %>%
 write_csv(by_year, file.path(output_folder, "02.Regression_Estimates_subtable_sig_by_year.csv"))
 
 cat("All regression significance sub-tables saved in", output_folder, "\n")
-
-
 
 
 ##----------------------------------------------------------------
@@ -435,7 +433,7 @@ cat("table saved", output_file_tpe, "\n")
 ## 4.4 Create sub-tables from main aggregated TPE table
 ##----------------------------------------------------------------
 
-
+######## General Subtables
 
 # Columns to *always* include in the grouping
 cause_cols <- c("acause_lvl1", "cause_name_lvl1", "acause_lvl2", "cause_name_lvl2")
@@ -477,5 +475,25 @@ write_csv(by_cause_year, file.path(output_folder, "04.Two_Part_Estimates_subtabl
 
 cat("All subtables (with cause levels preserved) have been saved to CSV in ", output_folder, "\n")
 
+######## Removing RX & specific causes from data - subtable
 
+# 1. Filter out RX type of care
+df_master_filtered <- df_input_tpe  %>%
+  filter(toc != "RX")
+
+# 2. Exclude specific causes by acause_lvl2 or cause_name_lvl2/cause_name_lvl1
+# You can do this by disease group (acause_lvl2) or by descriptive name (cause_name_lvl2)
+causes_to_exclude <- c(
+  "_subs",         # Substance use disorders (likely coded as "_subs")
+  "_mental",       # Mental disorders
+  "hiv",           # HIV/AIDS (if you want to remove, or comment this out to keep HIV)
+  "_well",         # Well care
+  "mater_neonat"   # Maternal and neonatal
+)
+
+df_master_filtered <- df_master_filtered %>%
+  filter(!acause_lvl2 %in% causes_to_exclude)
+
+by_cause_filtered <- weighted_mean_all(df_master_filtered, cause_cols, value_cols, "total_row_count")
+write_csv(by_cause, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_cause_fileted.csv"))
 

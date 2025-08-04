@@ -66,6 +66,9 @@ script_path <- file.path(h, "repo/Aim1/aim1_scripts/B_analysis/B2_worker/B2_work
 log_dir <- file.path(l, "LU_CMS/DEX/hivsud/aim1/B_analysis/logs")
 dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
 
+# Set number of bootstrap iterations
+bootstrap_iterations <- 20
+
 ##----------------------------------------------------------------
 ## 3. Submit jobs
 ##----------------------------------------------------------------
@@ -73,7 +76,7 @@ dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
 jid <- SUBMIT_ARRAY_JOB(
   name = "B1_two_part",
   script = script_path,
-  args = c(fp_parameters),
+  args = c(fp_parameters, bootstrap_iterations),
   error_dir = log_dir,
   output_dir = log_dir,
   queue = "all.q",

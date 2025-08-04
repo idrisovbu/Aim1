@@ -74,7 +74,7 @@ df_master <- read.csv(file = file.path(input_dir, "04.Two_Part_Estimates_inflati
 df_sub_age        <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_age.csv"))
 # Each row summarizes cost and incremental cost ("delta") by cause (lvl1/lvl2), stratified by age group, across all races, years, type of care, etc.
 
-df_sub_cause      <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_cause.csv"))
+df_sub_cause      <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_cause_fileted.csv"))
 # Aggregated by disease cause (lvl1/lvl2) only, pooling across years, ages, race, and type of care. Shows overall average costs and deltas for each disease category.
 
 df_sub_cause_year <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_cause_year.csv"))
@@ -115,10 +115,6 @@ df_sub_cause_nouplow_long$scenario <- factor(
 ####################################
 # 04 figures
 ####################################
-
-summary(df_master)
-unique(df_master$acause_lvl2)
-unique(df_master$toc)
 
 df_long <- df_sub_cause %>%
   select(acause_lvl1, cause_name_lvl1, acause_lvl2, cause_name_lvl2,
@@ -171,71 +167,153 @@ save_plot(delta_plot, "mean_delta_level2_comparison_HIV_SUD_only")
 
 
 
-###______
+######
 
-# 1. Filter out RX type of care
-df_master_filtered <- df_master %>%
-  filter(toc != "RX")
+# Looking at HIV delta
 
-# 2. Exclude specific causes by acause_lvl2 or cause_name_lvl2/cause_name_lvl1
-# You can do this by disease group (acause_lvl2) or by descriptive name (cause_name_lvl2)
-causes_to_exclude <- c(
-  "_subs",         # Substance use disorders (likely coded as "_subs")
-  "_mental",       # Mental disorders
-  "hiv",           # HIV/AIDS (if you want to remove, or comment this out to keep HIV)
-  "_well",         # Well care
-  "mater_neonat"   # Maternal and neonatal
-)
-
-df_master_filtered <- df_master_filtered %>%
-  filter(!acause_lvl2 %in% causes_to_exclude)
-
-
-# Example: Continue with your plotting code, e.g.:
-df_long <- df_master_filtered %>%
-  select(acause_lvl1, cause_name_lvl1, acause_lvl2, cause_name_lvl2,
-         mean_delta_hiv, lower_ci_delta_hiv, upper_ci_delta_hiv,
-         mean_delta_sud, lower_ci_delta_sud, upper_ci_delta_sud) %>%
-  pivot_longer(
-    cols = c(mean_delta_hiv, mean_delta_sud,
-             lower_ci_delta_hiv, lower_ci_delta_sud,
-             upper_ci_delta_hiv, upper_ci_delta_sud),
-    names_to = c("stat", "scenario"),
-    names_pattern = "(mean|lower_ci|upper_ci)_delta_(hiv|sud)",
-    values_to = "value"
-  ) %>%
-  pivot_wider(
-    names_from = stat,
-    values_from = value
-  )
-
-# Plot as before using df_long
-delta_plot <- ggplot(df_long, aes(x = mean, y = reorder(cause_name_lvl2, mean), fill = scenario)) +
-  geom_bar(stat = "identity", position = position_dodge(width = 0.8), width = 0.7) +
-  geom_errorbar(
-    aes(xmin = lower_ci, xmax = upper_ci),
-    width = 0.2,
-    position = position_dodge(width = 0.8)
-  ) +
-  geom_vline(xintercept = 0, color = "gray50", linetype = "dashed") +
-  scale_fill_jama(
-    breaks = c("hiv", "sud"),
-    labels = c("HIV", "SUD")
-  ) +
+hiv_delta <- ggplot(df_sub_year, aes(x = year_id, y = mean_cost_hiv, color = cause_name_lvl2, group = cause_name_lvl2)) +
+  geom_line(size = 1.2) +  # Trend lines
+  geom_point(size = 2) +   # Points at each year
   labs(
-    title = "Mean Delta per Level 2 Disease Category (Filtered: No RX, No SUD/Mental/HIV/Well/Maternal)",
-    x = "Mean Delta (Change in Cost compared to No HIV & SUD, 2019 USD)",
-    y = "Level 2 Disease Category",
-    fill = "Scenario"
+    title = "Delta Change over Time comparing Non-HIV Non-USD to HIV costs for Level 2 Disease",
+    x = "Year",
+    y = "Delta (2019 USD)",
+    color = "Level 2 Disease Category"
+  ) +
+  scale_y_continuous(labels = dollar_format()) +
+  scale_x_continuous(breaks = 2008:2019, limits = c(2008, 2019)) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "plain", hjust = 0.5),
+    axis.title.x = element_text(margin = margin(t = 10)),
+    axis.title.y = element_text(margin = margin(r = 10)),
+    panel.grid.major = element_line(color = "gray90"),
+    panel.grid.minor = element_blank()
+  ) +
+  guides(color = guide_legend(ncol = 1))  # Force single column legend
+
+# Output
+save_plot(hiv_delta, "hiv_delta_over_time")
+
+
+# Looking at HIV+SUD delta
+
+ggplot(df_sub_year, aes(x = year_id, y = mean_cost_hiv_sud, color = cause_name_lvl2, group = cause_name_lvl2)) +
+  geom_line(size = 1.2) +  # Trend lines
+  geom_point(size = 2) +   # Points at each year
+  labs(
+    title = "Delta Change over Time comparing Non-HIV to HIV costs for Level 2 Disease",
+    x = "Year",
+    y = "Delta (2019 USD)",
+    color = "Level 2 Disease Category"
+  ) +
+  scale_y_continuous(labels = dollar_format()) +
+  scale_x_continuous(breaks = 2008:2019, limits = c(2008, 2019)) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "plain", hjust = 0.5),
+    axis.title.x = element_text(margin = margin(t = 10)),
+    axis.title.y = element_text(margin = margin(r = 10)),
+    panel.grid.major = element_line(color = "gray90"),
+    panel.grid.minor = element_blank()
+  ) +
+  guides(color = guide_legend(ncol = 1))  # Force single column legend
+
+
+###################
+# df_sub_age
+###################
+
+# Looking at specific age groups to see spending on hiv
+
+ggplot(
+  data = filter(df_sub_age, age_group_years_start == 85),
+  aes(x = reorder(cause_name_lvl2, cause_name_lvl2), y = mean_cost_hiv)
+) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(
+    title = "Spending per Beneficiary, HIV, Ages 65-69",
+    x = "Level 2 Disease Category",
+    y = "Spending per Disease Category per Beneficiary (2019 USD)"
+  ) +
+  scale_y_continuous(
+    limits = c(0, 20000),
+    breaks = c(5000, 10000, 15000, 20000),
+    labels = dollar_format()  # Adds $ formatting
   ) +
   theme_minimal(base_size = 14) +
   theme(
+    plot.title = element_text(face = "plain", hjust = 0.5),
     axis.title.x = element_text(margin = margin(t = 10)),
     axis.title.y = element_text(margin = margin(r = 10)),
-    axis.text.y = element_text(size = 10),
-    plot.title = element_text(hjust = 0.5)
+    axis.text.x = element_text(angle = 45, hjust = 1)
   )
 
-save_plot(delta_plot, "mean_delta_level2_comparison_filtered")
+# Looking at all age groups to see spending on hiv, percentage wise
+
+hiv_percent_age <- ggplot(
+  data = df_sub_age %>%
+    group_by(cause_name_lvl2) %>%
+    mutate(percent_mean_cost_hiv = mean_cost_hiv / sum(mean_cost_hiv, na.rm = TRUE) * 100) %>%
+    ungroup(),
+  aes(
+    x = reorder(cause_name_lvl2, cause_name_lvl2),
+    y = percent_mean_cost_hiv,
+    fill = factor(age_group_years_start)
+  )
+) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(
+    title = "Percent of Spending per Beneficiary, HIV, by Age Group",
+    x = "Level 2 Disease Category",
+    y = "Percentage of Total Spending per Disease",
+    fill = "Age Group (Years)"
+  ) +
+  scale_y_continuous(labels = percent_format(scale = 1)) +  # Format y-axis as %
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "plain", hjust = 0.5),
+    axis.title.x = element_text(margin = margin(t = 10)),
+    axis.title.y = element_text(margin = margin(r = 10)),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  scale_fill_brewer(palette = "Set3")  # Nice colors for age groups
+
+# Output
+save_plot(hiv_percent_age, "hiv_percent_age")
+
+
+
+
+hiv_percent_race <- ggplot(
+  data = df_sub_race %>%
+    group_by(cause_name_lvl2) %>%
+    mutate(percent_mean_cost_hiv = mean_cost_hiv / sum(mean_cost_hiv, na.rm = TRUE) * 100) %>%
+    ungroup(),
+  aes(
+    x = reorder(cause_name_lvl2, cause_name_lvl2),
+    y = percent_mean_cost_hiv,
+    fill = factor(race_cd)  # or use  recoded variable for prettier legend
+  )
+) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(
+    title = "Percent of HIV-Attributable Spending per Disease, by Race",
+    x = "Level 2 Disease Category",
+    y = "Percentage of Total HIV-Attributable Spending",
+    fill = "Race"
+  ) +
+  scale_y_continuous(labels = percent_format(scale = 1)) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "plain", hjust = 0.5),
+    axis.title.x = element_text(margin = margin(t = 10)),
+    axis.title.y = element_text(margin = margin(r = 10)),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  scale_fill_jama()  # Use JAMA palette for race
+
+# Output
+save_plot(hiv_percent_race, "hiv_percent_race")
 
 

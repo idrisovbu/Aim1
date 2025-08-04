@@ -33,13 +33,15 @@ if (Sys.info()["sysname"] == 'Linux'){
 ##----------------------------------------------------------------
 
 if (interactive()) {
-  path <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/bested/aggregated_by_year/compiled_F2T_data_2019_age85.parquet"
+  path <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/bested/aggregated_by_year/compiled_F2T_data_2010_age85.parquet"
   # df <- read_parquet(path) %>% sample_n(10000) # This loads the whole dataset in and takes a long time
-  df <- open_dataset(path) %>% head(100000) %>% collect() %>% sample_n(10000) # Only reads first 100,000 rows, then samples 10,000, much faster
+  #df <- open_dataset(path) %>% head(100000) %>% collect() %>% sample_n(10000) # Only reads first 100,000 rows, then samples 10,000, much faster
+  df <- open_dataset(path) %>% collect()
   df <- as.data.table(df)  
-  year_id <- 2019
+  year_id <- 2010
   file_type <- "F2T"
   age_group_years_start <- df$age_group_years_start[1]
+  bootstrap_iterations <- 1
   
   # Optional code to remove low count acause_lvl2 and fix factors only having 0's or 1's
   # # remove low count ones
@@ -56,6 +58,7 @@ if (interactive()) {
   # Read job args from SUBMIT_ARRAY_JOB
   args <- commandArgs(trailingOnly = TRUE)
   fp_parameters_input <- args[1]
+  bootstrap_iterations <- as.integer(args[2])
   
   # Identify row using SLURM array task ID
   array_job_number <- as.integer(Sys.getenv("SLURM_ARRAY_TASK_ID"))
@@ -136,7 +139,7 @@ df[, `:=`(
 df_bins_master <- df %>%
   group_by(acause_lvl2, race_cd, sex_id, age_group_years_start, toc_fact, has_hiv, has_sud) %>%
   summarise(row_count = n(), .groups = "drop") %>%
-  group_by(acause_lvl2, race_cd, sex_id, age_group_years_start, toc_fact) %>%
+  group_by(acause_lvl2, race_cd, age_group_years_start, toc_fact, has_hiv, has_sud) %>%
   mutate(prop_bin = row_count / sum(row_count, na.rm = TRUE)) %>%
   ungroup()
 
@@ -144,7 +147,7 @@ df_bins_master <- df %>%
 ## 4. Bootstrap
 ##----------------------------------------------------------------
 
-B <- 50 # Number of bootstrap iterations
+B <- bootstrap_iterations # Number of bootstrap iterations (default = 50)
 
 # Set seed
 set.seed(123)
@@ -175,36 +178,31 @@ for (b in seq_len(B)) {
   }
 
   # Logistic model (toc_fact removed for RX)
-  mod_logit <- if (file_type == "RX") {
-    glm(has_cost ~ acause_lvl2 * has_hiv + acause_lvl2 * has_sud + race_cd + sex_id,
+  mod_logit <- glm(has_cost ~ acause_lvl2 * has_hiv + acause_lvl2 * has_sud + race_cd + sex_id + toc_fact,
         data = df_boot, family = binomial(link = "logit"))
-  } else {
-    glm(has_cost ~ acause_lvl2 * has_hiv + acause_lvl2 * has_sud + race_cd + sex_id + toc_fact,
-        data = df_boot, family = binomial(link = "logit"))
-  }
 
   # Gamma input
   df_gamma_input <- df_boot[tot_pay_amt > 0]
   df_gamma_input[, tot_pay_amt := pmin(tot_pay_amt, quantile(tot_pay_amt, 0.995, na.rm = TRUE))]
 
   # Gamma model (toc_fact removed for RX)
-  mod_gamma <- if (file_type == "RX") {
-    glm(tot_pay_amt ~ acause_lvl2 * has_hiv + acause_lvl2 * has_sud + race_cd + sex_id,
+  mod_gamma <- glm(tot_pay_amt ~ acause_lvl2 * has_hiv + acause_lvl2 * has_sud + race_cd + sex_id + toc_fact,
         data = df_gamma_input, family = Gamma(link = "log"), control = glm.control(maxit = 100))
-  } else {
-    glm(tot_pay_amt ~ acause_lvl2 * has_hiv + acause_lvl2 * has_sud + race_cd + sex_id + toc_fact,
-        data = df_gamma_input, family = Gamma(link = "log"), control = glm.control(maxit = 100))
-  }
 
   # Predict in chunks to save memory
   grid_input_master <- as.data.table(df_bins_master)
   grid_input_master[, prob_has_cost := predict(mod_logit, newdata = .SD, type = "response")]
   grid_input_master[, cost_if_pos := predict(mod_gamma, newdata = .SD, type = "response")]
   grid_input_master[, exp_cost := prob_has_cost * cost_if_pos]
-
-  # Group summary
-  out_b <- grid_input_master[, .(exp_cost = sum(exp_cost * prop_bin, na.rm = TRUE)),
-                             by = .(acause_lvl2, race_cd, has_hiv, has_sud, age_group_years_start, toc_fact)]
+  
+  # Set expenses based on df grouping (see df_bins_master), collapse on sex, then pivot table wide
+  out_b <- copy(grid_input_master)
+  out_b[, exp_cost_bin := exp_cost * prop_bin]
+  
+  out_b <- out_b[
+    , .(exp_cost = sum(exp_cost_bin)), 
+    by = .(acause_lvl2, race_cd, age_group_years_start, toc_fact, has_hiv, has_sud)
+  ]
 
   out_b <- dcast(
     out_b,
