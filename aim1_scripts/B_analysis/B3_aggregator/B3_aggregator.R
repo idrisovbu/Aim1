@@ -423,11 +423,27 @@ df_input_tpe <- df_input_tpe %>%
 ##----------------------------------------------------------------
 ## 4.3 Save adjusted table Two Part Estimates to CSV
 ##----------------------------------------------------------------
+#--------------------------------------------
+# 4.3.1. Save full aggregated table (all causes)
+#--------------------------------------------
+output_file_tpe_full <- file.path(output_folder, "04.Two_Part_Estimates_inflation_adjusted_aggregated_unfiltered.csv")
+write_csv(df_input_tpe, output_file_tpe_full)
+cat("Full (all causes) table saved to:", output_file_tpe_full, "\n")
 
-# Save the aggregated results
-output_file_tpe <- file.path(output_folder, "04.Two_Part_Estimates_inflation_adjusted_aggregated.csv")
-write_csv(df_input_tpe, output_file_tpe)
-cat("table saved", output_file_tpe, "\n")
+#--------------------------------------------
+# 4.3.2 Exclude selected causes and save filtered table
+#--------------------------------------------
+causes_to_exclude <- c("_subs", "_mental", "mater_neonat", "hiv", "_rf", "_well", "_sense")
+
+# Filter out unwanted causes
+df_input_tpe_filtered <- df_input_tpe %>%
+  filter(!acause_lvl2 %in% causes_to_exclude)
+
+output_file_tpe_filtered <- file.path(output_folder, "04.Two_Part_Estimates_inflation_adjusted_aggregated.csv")
+write_csv(df_input_tpe_filtered, output_file_tpe_filtered)
+cat("Filtered (excluded causes) table saved to:", output_file_tpe_filtered, "\n")
+
+
 
 ##----------------------------------------------------------------
 ## 4.4 Create sub-tables from main aggregated TPE table
@@ -450,50 +466,28 @@ value_cols <- c(
 )
 
 # By cause (Level 2 + Level 1)
-by_cause <- weighted_mean_all(df_input_tpe, cause_cols, value_cols, "total_row_count")
+by_cause <- weighted_mean_all(df_input_tpe_filtered, cause_cols, value_cols, "total_row_count")
 write_csv(by_cause, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_cause.csv"))
 
 # By year (preserving both cause levels)
-by_year <- weighted_mean_all(df_input_tpe, c(cause_cols, "year_id"), value_cols, "total_row_count")
+by_year <- weighted_mean_all(df_input_tpe_filtered, c(cause_cols, "year_id"), value_cols, "total_row_count")
 write_csv(by_year, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_year.csv"))
 
 # By type of care (preserving both cause levels)
-by_toc <- weighted_mean_all(df_input_tpe, c(cause_cols, "toc"), value_cols, "total_row_count")
+by_toc <- weighted_mean_all(df_input_tpe_filtered, c(cause_cols, "toc"), value_cols, "total_row_count")
 write_csv(by_toc, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_toc.csv"))
 
 # By race (preserving both cause levels)
-by_race <- weighted_mean_all(df_input_tpe, c(cause_cols, "race_cd"), value_cols, "total_row_count")
+by_race <- weighted_mean_all(df_input_tpe_filtered, c(cause_cols, "race_cd"), value_cols, "total_row_count")
 write_csv(by_race, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_race.csv"))
 
 # By age group (preserving both cause levels)
-by_age <- weighted_mean_all(df_input_tpe, c(cause_cols, "age_group_years_start"), value_cols, "total_row_count")
+by_age <- weighted_mean_all(df_input_tpe_filtered, c(cause_cols, "age_group_years_start"), value_cols, "total_row_count")
 write_csv(by_age, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_age.csv"))
 
 # Example: By cause and year (joint stratification, cause levels always present)
-by_cause_year <- weighted_mean_all(df_input_tpe, c(cause_cols, "year_id"), value_cols, "total_row_count")
+by_cause_year <- weighted_mean_all(df_input_tpe_filtered, c(cause_cols, "year_id"), value_cols, "total_row_count")
 write_csv(by_cause_year, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_cause_year.csv"))
 
 cat("All subtables (with cause levels preserved) have been saved to CSV in ", output_folder, "\n")
-
-######## Removing RX & specific causes from data - subtable
-
-# 1. Filter out RX type of care
-df_master_filtered <- df_input_tpe  %>%
-  filter(toc != "RX")
-
-# 2. Exclude specific causes by acause_lvl2 or cause_name_lvl2/cause_name_lvl1
-# You can do this by disease group (acause_lvl2) or by descriptive name (cause_name_lvl2)
-causes_to_exclude <- c(
-  "_subs",         # Substance use disorders (likely coded as "_subs")
-  "_mental",       # Mental disorders
-  "hiv",           # HIV/AIDS (if you want to remove, or comment this out to keep HIV)
-  "_well",         # Well care
-  "mater_neonat"   # Maternal and neonatal
-)
-
-df_master_filtered <- df_master_filtered %>%
-  filter(!acause_lvl2 %in% causes_to_exclude)
-
-by_cause_filtered <- weighted_mean_all(df_master_filtered, cause_cols, value_cols, "total_row_count")
-write_csv(by_cause, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_cause_fileted.csv"))
 

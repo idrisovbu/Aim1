@@ -74,7 +74,7 @@ df_master <- read.csv(file = file.path(input_dir, "04.Two_Part_Estimates_inflati
 df_sub_age        <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_age.csv"))
 # Each row summarizes cost and incremental cost ("delta") by cause (lvl1/lvl2), stratified by age group, across all races, years, type of care, etc.
 
-df_sub_cause      <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_cause_fileted.csv"))
+df_sub_cause      <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_cause.csv"))
 # Aggregated by disease cause (lvl1/lvl2) only, pooling across years, ages, race, and type of care. Shows overall average costs and deltas for each disease category.
 
 df_sub_cause_year <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_cause_year.csv"))
