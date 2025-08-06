@@ -1040,3 +1040,112 @@ regression_summary <- regression_all_df[, .(
 ), by = variable][order(mean_p_gamma)]
 
 
+######
+
+
+# # Remove upper / lower columns
+# df_sub_cause_nouplow <- df_sub_cause %>%
+#   select(-matches("upper|lower"))
+# 
+# ##### Comparing Deltas across each level 2 category compared to mean
+# 
+# # Convert table to long
+# df_sub_cause_nouplow_long <- df_sub_cause_nouplow %>%
+#   pivot_longer(
+#     cols = starts_with("mean_delta"),
+#     names_to = "scenario",
+#     values_to = "delta"
+#   )
+# 
+# # Refactor the scenario column
+# df_sub_cause_nouplow_long$scenario <- factor(
+#   df_sub_cause_nouplow_long$scenario,
+#   levels = c("mean_delta_hiv", "mean_delta_sud", "mean_delta_hiv_sud"),
+#   labels = c("mean_delta_hiv", "mean_delta_sud", "mean_delta_hiv_sud")
+# )
+
+# Looking at HIV delta
+
+####################################
+# This below can be removed 
+####################################
+
+# hiv_delta <- ggplot(df_sub_year, aes(x = year_id, y = mean_cost_hiv, color = cause_name_lvl2, group = cause_name_lvl2)) +
+#   geom_line(size = 1.2) +  # Trend lines
+#   geom_point(size = 2) +   # Points at each year
+#   labs(
+#     title = "Delta Change over Time comparing Non-HIV Non-USD to HIV costs for Level 2 Disease",
+#     x = "Year",
+#     y = "Delta (2019 USD)",
+#     color = "Level 2 Disease Category"
+#   ) +
+#   scale_y_continuous(labels = dollar_format()) +
+#   scale_x_continuous(breaks = 2008:2019, limits = c(2008, 2019)) +
+#   theme_minimal(base_size = 14) +
+#   theme(
+#     plot.title = element_text(face = "plain", hjust = 0.5),
+#     axis.title.x = element_text(margin = margin(t = 10)),
+#     axis.title.y = element_text(margin = margin(r = 10)),
+#     panel.grid.major = element_line(color = "gray90"),
+#     panel.grid.minor = element_blank()
+#   ) +
+#   guides(color = guide_legend(ncol = 1))  # Force single column legend
+# 
+# # Output
+# save_plot(hiv_delta, "hiv_delta_over_time")
+
+
+# Looking at HIV+SUD delta
+
+# ggplot(df_sub_year, aes(x = year_id, y = mean_cost_hiv_sud, color = cause_name_lvl2, group = cause_name_lvl2)) +
+#   geom_line(size = 1.2) +  # Trend lines
+#   geom_point(size = 2) +   # Points at each year
+#   labs(
+#     title = "Delta Change over Time comparing Non-HIV to HIV costs for Level 2 Disease",
+#     x = "Year",
+#     y = "Delta (2019 USD)",
+#     color = "Level 2 Disease Category"
+#   ) +
+#   scale_y_continuous(labels = dollar_format()) +
+#   scale_x_continuous(breaks = 2008:2019, limits = c(2008, 2019)) +
+#   theme_minimal(base_size = 14) +
+#   theme(
+#     plot.title = element_text(face = "plain", hjust = 0.5),
+#     axis.title.x = element_text(margin = margin(t = 10)),
+#     axis.title.y = element_text(margin = margin(r = 10)),
+#     panel.grid.major = element_line(color = "gray90"),
+#     panel.grid.minor = element_blank()
+#   ) +
+#   guides(color = guide_legend(ncol = 1))  # Force single column legend
+
+
+###################
+# df_sub_age
+###################
+
+# Looking at specific age groups to see spending on hiv
+# 
+# ggplot(
+#   data = filter(df_sub_age, age_group_years_start == 85),
+#   aes(x = reorder(cause_name_lvl2, cause_name_lvl2), y = mean_cost_hiv)
+# ) +
+#   geom_bar(stat = "identity", fill = "steelblue") +
+#   labs(
+#     title = "Spending per Beneficiary, HIV, Ages 65-69",
+#     x = "Level 2 Disease Category",
+#     y = "Spending per Disease Category per Beneficiary (2019 USD)"
+#   ) +
+#   scale_y_continuous(
+#     limits = c(0, 20000),
+#     breaks = c(5000, 10000, 15000, 20000),
+#     labels = dollar_format()  # Adds $ formatting
+#   ) +
+#   theme_minimal(base_size = 14) +
+#   theme(
+#     plot.title = element_text(face = "plain", hjust = 0.5),
+#     axis.title.x = element_text(margin = margin(t = 10)),
+#     axis.title.y = element_text(margin = margin(r = 10)),
+#     axis.text.x = element_text(angle = 45, hjust = 1)
+#   )
+
+# Looking at all age groups to see spending on hiv, percentage wise
