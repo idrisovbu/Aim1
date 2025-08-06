@@ -131,6 +131,7 @@ df[, `:=`(
 ## 3. Build bin distribution from the full data, used in bootstrapping
 ##----------------------------------------------------------------
 
+# NEEEDS FIXING! 8/6/25
 df_bins_master <- df %>%
   group_by(acause_lvl2, race_cd, sex_id, age_group_years_start, toc_fact, has_hiv, has_sud) %>%
   summarise(row_count = n(), .groups = "drop") %>%

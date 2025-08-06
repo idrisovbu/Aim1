@@ -428,7 +428,7 @@ fwrite(df_ss_t3, file.path(output_tables_dir, "SS_T3.csv"))
 ##----------------------------------------------------------------
 
 # Set df
-df_tpe_t1 <- data_list$`04.Two_Part_Estimates_inflation_adjusted_aggregated`
+df_tpe_t1 <- data_list$`04.Two_Part_Estimates_inflation_adjusted_aggregated_unfiltered`
 
 # Group by summary to get 
 df_tpe_t1 <- df_tpe_t1 %>%
@@ -439,7 +439,7 @@ df_tpe_t1 <- df_tpe_t1 %>%
     upper_ci = weighted.mean(upper_ci, w = total_row_count, na.rm = TRUE),
     mean_delta_hiv = weighted.mean(mean_delta_hiv, w = total_row_count, na.rm = TRUE),
     lower_ci_delta_hiv = weighted.mean(lower_ci_delta_hiv, w = total_row_count, na.rm = TRUE),
-    upper_ci_hiv_sud = weighted.mean(upper_ci_hiv_sud, w = total_row_count, na.rm = TRUE),
+    upper_ci_delta_hiv = weighted.mean(upper_ci_delta_hiv, w = total_row_count, na.rm = TRUE),
     mean_delta_sud = weighted.mean(mean_delta_sud, w = total_row_count, na.rm = TRUE),
     lower_ci_delta_sud = weighted.mean(lower_ci_delta_sud, w = total_row_count, na.rm = TRUE),
     upper_ci_delta_sud = weighted.mean(upper_ci_delta_sud, w = total_row_count, na.rm = TRUE)
@@ -458,13 +458,13 @@ for (col in colnames(df_tpe_t1)) {
 df_tpe_t1 <- df_tpe_t1 %>%
   mutate(
     mean_cost_CI = paste0(mean_cost, " (", lower_ci, " - ", upper_ci, ")"),
-    mean_HIV_delta_cost_CI = paste0(mean_delta_hiv, " (", lower_ci_delta_hiv, " - ", upper_ci_hiv_sud, ")"),
+    mean_HIV_delta_cost_CI = paste0(mean_delta_hiv, " (", lower_ci_delta_hiv, " - ", upper_ci_delta_hiv, ")"),
     mean_SUD_delta_cost_CI = paste0(mean_delta_sud, " (", lower_ci_delta_sud, " - ", upper_ci_delta_sud, ")")
   )
 
 # Pivot table wider based on toc
 cols_to_exclude <- c("mean_cost", "lower_ci", "upper_ci", "mean_delta_hiv", "lower_ci_delta_hiv", 
-                          "upper_ci_hiv_sud", "mean_delta_sud", "lower_ci_delta_sud", "upper_ci_delta_sud")
+                          "upper_ci_delta_hiv", "mean_delta_sud", "lower_ci_delta_sud", "upper_ci_delta_sud")
 
 df_tpe_t1_value_cols <- c("mean_cost_CI", "mean_HIV_delta_cost_CI", "mean_SUD_delta_cost_CI")
 
@@ -505,7 +505,7 @@ fwrite(df_tpe_t1, file.path(output_tables_dir, "TPE_T1.csv"))
 ##----------------------------------------------------------------
 
 # Set df
-df_tpe_t2 <- data_list$`04.Two_Part_Estimates_inflation_adjusted_aggregated`
+df_tpe_t2 <- data_list$`04.Two_Part_Estimates_inflation_adjusted_aggregated_unfiltered`
 
 # Group by summary to get 
 df_tpe_t2 <- df_tpe_t2 %>%
@@ -516,7 +516,7 @@ df_tpe_t2 <- df_tpe_t2 %>%
     upper_ci = weighted.mean(upper_ci, w = total_row_count, na.rm = TRUE),
     mean_delta_hiv = weighted.mean(mean_delta_hiv, w = total_row_count, na.rm = TRUE),
     lower_ci_delta_hiv = weighted.mean(lower_ci_delta_hiv, w = total_row_count, na.rm = TRUE),
-    upper_ci_hiv_sud = weighted.mean(upper_ci_hiv_sud, w = total_row_count, na.rm = TRUE),
+    upper_ci_delta_hiv = weighted.mean(upper_ci_delta_hiv, w = total_row_count, na.rm = TRUE),
     mean_delta_sud = weighted.mean(mean_delta_sud, w = total_row_count, na.rm = TRUE),
     lower_ci_delta_sud = weighted.mean(lower_ci_delta_sud, w = total_row_count, na.rm = TRUE),
     upper_ci_delta_sud = weighted.mean(upper_ci_delta_sud, w = total_row_count, na.rm = TRUE)
@@ -535,13 +535,13 @@ for (col in colnames(df_tpe_t2)) {
 df_tpe_t2 <- df_tpe_t2 %>%
   mutate(
     mean_cost_CI = paste0(mean_cost, " (", lower_ci, " - ", upper_ci, ")"),
-    mean_HIV_delta_cost_CI = paste0(mean_delta_hiv, " (", lower_ci_delta_hiv, " - ", upper_ci_hiv_sud, ")"),
+    mean_HIV_delta_cost_CI = paste0(mean_delta_hiv, " (", lower_ci_delta_hiv, " - ", upper_ci_delta_hiv, ")"),
     mean_SUD_delta_cost_CI = paste0(mean_delta_sud, " (", lower_ci_delta_sud, " - ", upper_ci_delta_sud, ")")
   )
 
 # Pivot table wider based on toc
 cols_to_exclude <- c("mean_cost", "lower_ci", "upper_ci", "mean_delta_hiv", "lower_ci_delta_hiv", 
-                     "upper_ci_hiv_sud", "mean_delta_sud", "lower_ci_delta_sud", "upper_ci_delta_sud")
+                     "upper_ci_delta_hiv", "mean_delta_sud", "lower_ci_delta_sud", "upper_ci_delta_sud")
 
 df_tpe_t2_value_cols <- c("mean_cost_CI", "mean_HIV_delta_cost_CI", "mean_SUD_delta_cost_CI")
 
@@ -583,7 +583,7 @@ fwrite(df_tpe_t2, file.path(output_tables_dir, "TPE_T2.csv"))
 ##----------------------------------------------------------------
 
 # Set df
-df_tpe_t3 <- data_list$`04.Two_Part_Estimates_inflation_adjusted_aggregated`
+df_tpe_t3 <- data_list$`04.Two_Part_Estimates_inflation_adjusted_aggregated_unfiltered`
 
 # Group by summary to get 
 df_tpe_t3 <- df_tpe_t3 %>%
@@ -594,7 +594,7 @@ df_tpe_t3 <- df_tpe_t3 %>%
     upper_ci = weighted.mean(upper_ci, w = total_row_count, na.rm = TRUE),
     mean_delta_hiv = weighted.mean(mean_delta_hiv, w = total_row_count, na.rm = TRUE),
     lower_ci_delta_hiv = weighted.mean(lower_ci_delta_hiv, w = total_row_count, na.rm = TRUE),
-    upper_ci_hiv_sud = weighted.mean(upper_ci_hiv_sud, w = total_row_count, na.rm = TRUE),
+    upper_ci_delta_hiv = weighted.mean(upper_ci_delta_hiv, w = total_row_count, na.rm = TRUE),
     mean_delta_sud = weighted.mean(mean_delta_sud, w = total_row_count, na.rm = TRUE),
     lower_ci_delta_sud = weighted.mean(lower_ci_delta_sud, w = total_row_count, na.rm = TRUE),
     upper_ci_delta_sud = weighted.mean(upper_ci_delta_sud, w = total_row_count, na.rm = TRUE)
@@ -613,13 +613,13 @@ for (col in colnames(df_tpe_t3)) {
 df_tpe_t3 <- df_tpe_t3 %>%
   mutate(
     mean_cost_CI = paste0(mean_cost, " (", lower_ci, " - ", upper_ci, ")"),
-    mean_HIV_delta_cost_CI = paste0(mean_delta_hiv, " (", lower_ci_delta_hiv, " - ", upper_ci_hiv_sud, ")"),
+    mean_HIV_delta_cost_CI = paste0(mean_delta_hiv, " (", lower_ci_delta_hiv, " - ", upper_ci_delta_hiv, ")"),
     mean_SUD_delta_cost_CI = paste0(mean_delta_sud, " (", lower_ci_delta_sud, " - ", upper_ci_delta_sud, ")")
   )
 
 # Pivot table wider based on toc
 cols_to_exclude <- c("mean_cost", "lower_ci", "upper_ci", "mean_delta_hiv", "lower_ci_delta_hiv", 
-                     "upper_ci_hiv_sud", "mean_delta_sud", "lower_ci_delta_sud", "upper_ci_delta_sud")
+                     "upper_ci_delta_hiv", "mean_delta_sud", "lower_ci_delta_sud", "upper_ci_delta_sud")
 
 df_tpe_t3_value_cols <- c("mean_cost_CI", "mean_HIV_delta_cost_CI", "mean_SUD_delta_cost_CI")
 
