@@ -77,3 +77,35 @@ boot_combined_filter <- boot_combined %>%
   filter(acause_lvl2 == "_infect") %>%
   filter(race_cd == "BLCK") %>%
   filter(toc_fact == "IP") 
+
+
+
+##check RX data on DEX team 
+
+fp <- "/mnt/share/limited_use/LU_CMS/DEX/01_pipeline/MDCR/run_77/CAUSEMAP/data/carrier=false/toc=RX/year_id=2019/st_resi=AK/age_group_years_start=70/sex_id=1/rx_part0.parquet"
+
+# Read the parquet file into a data frame
+df <- read_parquet(fp_chunk)
+
+df <- open_dataset(fp) %>% head(100000)
+
+df_summary <- df %>%
+  group_by(bene_id) %>%
+  summarise(n = n_distinct(acause), .groups = "drop") %>%
+  collect()
+
+
+fp_chunk <-"/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/20250730/rx_chunks/year2019/age75/rx_2019_age75_sex1_stateCT.parquet"
+
+
+# Read the parquet file into a data frame
+df <- read_parquet(fp_chunk)
+
+df <- open_dataset(fp) %>% head(100000)
+
+df_summary <- df %>%
+  group_by(bene_id) %>%
+  summarise(n = n_distinct(acause_lvl2), .groups = "drop") %>%
+  collect()
+
+
