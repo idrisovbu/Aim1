@@ -96,12 +96,11 @@ for (i in 1:nrow(data_dirs)) {
   # Read in data
   dt <- open_dataset(dir) %>%
     filter(ENHANCED_FIVE_PERCENT_FLAG == "Y") %>% # Filters on 5% random sample column
-    select(claim_id, acause, primary_cause, race_cd, tot_chg_amt) %>%
+    select(bene_id, acause, primary_cause, race_cd, tot_chg_amt) %>%
     collect() %>%
     as.data.table()
   
   # Rename columns
-  setnames(dt, "claim_id", "bene_id")
   setnames(dt, "tot_chg_amt", "tot_pay_amt")
   
   # Add metadata from folder structure

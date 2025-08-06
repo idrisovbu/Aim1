@@ -80,30 +80,33 @@ boot_combined_filter <- boot_combined %>%
 
 
 
-##check RX data on DEX team 
-
+##check RX data on DEX team cluster (reading in JUST rx_part0.parquet)
 fp <- "/mnt/share/limited_use/LU_CMS/DEX/01_pipeline/MDCR/run_77/CAUSEMAP/data/carrier=false/toc=RX/year_id=2019/st_resi=AK/age_group_years_start=70/sex_id=1/rx_part0.parquet"
+df <- open_dataset(fp) %>% head(100000) %>% collect()
 
-# Read the parquet file into a data frame
-df <- read_parquet(fp_chunk)
-
-df <- open_dataset(fp) %>% head(100000)
-
+#this df shows us that each bene has more than one cause based on unique count
 df_summary <- df %>%
   group_by(bene_id) %>%
-  summarise(n = n_distinct(acause), .groups = "drop") %>%
-  collect()
+  summarise(n = n_distinct(acause), .groups = "drop")
 
 
+##check RX data on DEX team cluster (reading in JUST rx_part_c_part0.parquet)
+fp_part0 <- "/mnt/share/limited_use/LU_CMS/DEX/01_pipeline/MDCR/run_77/CAUSEMAP/data/carrier=false/toc=RX/year_id=2019/st_resi=AK/age_group_years_start=70/sex_id=1/rx_part_c_part0.parquet"
+df_part0 <- open_dataset(fp_part0) %>% head(100000) %>% collect()
+
+#this df shows us that each bene has more than one cause based on unique count
+df_summary_part0 <- df_part0 %>%
+  group_by(bene_id) %>%
+  summarise(n = n_distinct(acause), .groups = "drop")
+
+
+
+# Read the parquet file into a data frame - CHUNK
 fp_chunk <-"/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/20250730/rx_chunks/year2019/age75/rx_2019_age75_sex1_stateCT.parquet"
 
+df_rx_chunks <- open_dataset(fp_chunk) %>% head(100000) %>% collect()
 
-# Read the parquet file into a data frame
-df <- read_parquet(fp_chunk)
-
-df <- open_dataset(fp) %>% head(100000)
-
-df_summary <- df %>%
+df_summary_chunck <- df_rx_chunks %>%
   group_by(bene_id) %>%
   summarise(n = n_distinct(acause_lvl2), .groups = "drop") %>%
   collect()

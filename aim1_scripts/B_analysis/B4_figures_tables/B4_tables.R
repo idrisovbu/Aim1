@@ -21,7 +21,7 @@ if (dir.exists("/mnt/share/limited_use")) {
   # IHME/cluster environment
   base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/"
   input_dir <- file.path(base_dir, "05.Aggregation_Summary", "bested")
-  figures_dir <- file.path(base_dir, "07.Tables")
+  output_tables_dir <- file.path(base_dir, "07.Tables", date_today)
   # (add your other cluster-specific library loads here)
 } else {
   # # Local development define manually
