@@ -546,3 +546,33 @@ hiv_percent_age <- ggplot(
 save_plot(hiv_percent_age, "hiv_percent_age")
 
 
+library(viridis)
+
+plot_mean_cost_by_disease_over_time <- df_master %>%
+  group_by(year_id, cause_name_lvl2) %>%
+  summarise(
+    mean_cost = weighted.mean(mean_cost, total_row_count, na.rm = TRUE),
+    lower_ci = weighted.mean(lower_ci, total_row_count, na.rm = TRUE),
+    upper_ci = weighted.mean(upper_ci, total_row_count, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  ggplot(aes(x = as.integer(year_id), y = mean_cost, color = cause_name_lvl2, group = cause_name_lvl2, fill = cause_name_lvl2)) +
+  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci), alpha = 0.17, color = NA) +
+  geom_line(size = 1.1) +
+  geom_point(size = 2) +
+  scale_color_viridis_d(option = "turbo") +
+  scale_fill_viridis_d(option = "turbo") +
+  scale_y_continuous(labels = scales::dollar_format()) +
+  scale_x_continuous(breaks = unique(df_master$year_id)) +
+  labs(
+    title = "Average Cost per Beneficiary Over Time by Disease Category",
+    x = "Year", y = "Mean Cost (USD)", color = "Disease", fill = "Disease"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+save_plot(plot_mean_cost_by_disease_over_time, "mean_cost_over_time_by_disease_ribbons_viridis")
+
+
+
+
