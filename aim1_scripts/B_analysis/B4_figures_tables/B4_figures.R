@@ -138,6 +138,11 @@ df_long <- df_sub_cause %>%
     values_from = value
   )
 
+
+df_long$scenario <- factor(df_long$scenario, levels = c("hiv", "sud"), labels = c("HIV", "MSUD"))
+
+
+###
 delta_plot <- ggplot(df_long, aes(x = mean, y = reorder(cause_name_lvl2, mean), fill = scenario)) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.8), width = 0.7) +
   geom_errorbar(
@@ -146,20 +151,18 @@ delta_plot <- ggplot(df_long, aes(x = mean, y = reorder(cause_name_lvl2, mean), 
     position = position_dodge(width = 0.8)
   ) +
   geom_vline(xintercept = 0, color = "gray50", linetype = "dashed") +
-  scale_fill_jama(
-    breaks = c("hiv", "sud"),
-    labels = c("HIV", "MSUD")
-  ) +
+  scale_fill_jama() +
   scale_x_continuous(
     breaks = c(-2500, 0, 2500, 7500, 12500),
     labels = scales::dollar_format()
   ) +
   labs(
-    title = "Mean Delta per Level 2 Disease Category (HIV and MSUD Only)",
-    x = "Mean Delta (Change in Cost compared to No HIV & MSUD, 2019 USD)",
-    y = "Level 2 Disease Category",
+    title = "Mean Delta per Disease Category (HIV and MSUD Only)",
+    x = "All years, care types and races (Change in Cost compared to No HIV & no MSUD, 2019 USD)",
+    y = "Disease Category",
     fill = "Scenario"
   ) +
+  guides(fill = guide_legend(reverse = TRUE)) +   # <---- This flips legend order!
   theme_minimal(base_size = 14) +
   theme(
     axis.title.x = element_text(margin = margin(t = 10)),
@@ -169,8 +172,6 @@ delta_plot <- ggplot(df_long, aes(x = mean, y = reorder(cause_name_lvl2, mean), 
   )
 
 save_plot(delta_plot, "mean_delta_level2_comparison")
-
-
 
 ######
 
@@ -349,6 +350,22 @@ df_long_race <- df_sub_race %>%
     names_from = stat,
     values_from = value
   )
+
+df_long_race$scenario <- factor(df_long_race$scenario, 
+                                levels = c("hiv", "sud"), 
+                                labels = c("HIV", "MSUD"))
+labs(
+  title = "Mean Delta by Disease and Comorbidity (by Race)",
+  subtitle = "All years, all ages, all types of care",
+  x = "Mean Delta (Change in Cost compared to No HIV & MSUD, 2019 USD)",
+  y = "Level 2 Disease Category",
+  fill = "Race"
+)
+
+
+
+##
+
 
 delta_plot_race2 <- ggplot(
   df_long_race, 
