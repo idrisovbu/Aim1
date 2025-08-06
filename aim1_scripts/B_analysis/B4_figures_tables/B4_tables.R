@@ -26,12 +26,12 @@ if (dir.exists("/mnt/share/limited_use")) {
 } else {
   # # Local development define manually
   
-  # Bulat's directory
+  # Mac directory
   # base_dir <- "~/Aim1WD/"
   # input_dir <- file.path(base_dir, "aim1_Input_personal_mac")
   # output_tables_dir <- file.path(base_dir, "aim1_output_personal_mac", "07.Tables/", date_today)
 
-  # Alistair's directory
+  # Windows directory
   base_dir <- "C:/Users/aches/Desktop/Stuff/Coding/Aim1WD/"
   input_dir <- file.path(base_dir, "05.Aggregation_Summary/bested/")
   output_tables_dir <- file.path(base_dir, "07.Tables/", date_today)
