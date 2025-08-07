@@ -686,6 +686,3 @@ colnames(df_tpe_t3) <- converted_names
 fwrite(df_tpe_t3, file.path(output_tables_dir, "TPE_T3.csv"))
 
 
-
-
-

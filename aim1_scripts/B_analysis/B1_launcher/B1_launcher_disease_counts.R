@@ -52,7 +52,8 @@ df_params <- data.frame(directory = input_files) %>%
     year_id = as.numeric(sub(".*_(\\d{4})_age\\d+\\.parquet$", "\\1", basename(directory)))
     ) %>%   
   filter(!is.na(year_id)) %>%
-  filter(year_id %in% c(2000, 2010, 2014, 2015, 2016, 2019)) # 2000, 2010, 2014, 2015, 2016, 2019 -> These years have the full data for all types of care (excl. RX)
+  filter(year_id %in% c(2000, 2010, 2014, 2015, 2016, 2019)) #%>% # 2000, 2010, 2014, 2015, 2016, 2019 -> These years have the full data for all types of care (excl. RX)
+#filter(file_type == "RX")  ### remove after run
 
 # Manual df_params override for re-running particular jobs
 # df_params <- df_params[c(66, 71), ]
@@ -84,9 +85,9 @@ jid <- SUBMIT_ARRAY_JOB(
   output_dir = log_dir,
   queue = "all.q", 
   n_jobs = nrow(df_params),
-  memory = "200G", 
+  memory = "100G", 
   threads = 1,
-  time = "12:00:00", # Needs at least 3 hours for each job, RX takes longer than F2T # 72 hours max with this all.q;
+  time = "1:00:00", # Needs at least 3 hours for each job, RX takes longer than F2T # 72 hours max with this all.q;
   ## long.q is 384H (2 weeks) if its under 72 then do all.q #https://docs.cluster.ihme.washington.edu/#hpc-execution-host-hardware-specifications
   user_email = paste0(user, "@uw.edu"),
   archive = FALSE,
