@@ -131,19 +131,23 @@ df[, `:=`(
 ## 3. Build bin distribution from the full data, used in bootstrapping
 ##----------------------------------------------------------------
 
-# NEEEDS FIXING! 8/6/25
+# NEEEDS Checking 8/6/25
+
 df_bins_master <- df %>%
   group_by(acause_lvl2, race_cd, sex_id, age_group_years_start, toc_fact, has_hiv, has_sud) %>%
-  summarise(row_count = n(), .groups = "drop") %>%
-  group_by(acause_lvl2, race_cd, sex_id, age_group_years_start, toc_fact) %>%
-  mutate(prop_bin = row_count / sum(row_count, na.rm = TRUE)) %>%
+  summarise(
+    row_count = n(),
+    .groups = "drop_last"  # keep grouping for next step
+  ) %>%
+  mutate(prop_bin = row_count / sum(row_count)) %>%
   ungroup()
+
 
 ##----------------------------------------------------------------
 ## 4. Bootstrap (RX only: Mean by group, not regression)
 ##----------------------------------------------------------------
 
-B <- 50
+B <- 20
 
 set.seed(123)
 
@@ -267,3 +271,4 @@ file_out <- generate_filename("bootstrap_marginal_results", ".csv")
 out_path <- file.path(bootstrap_results_output_folder, file_out)
 write.csv(df_summary, out_path, row.names = FALSE)
 cat("Wrote final CSV to:", out_path, "\n")
+

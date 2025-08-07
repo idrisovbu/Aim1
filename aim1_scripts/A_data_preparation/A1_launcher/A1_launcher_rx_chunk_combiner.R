@@ -59,11 +59,13 @@ df_rx_list_input_data_subset <- data.frame(directory = rx_input_data) %>%
 # Check against params file to ensure that all chunks have output files 
 param_output_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/resources_pharm/"
 df_A1_rx_parameters_pharm <- fread(file.path(param_output_dir, "/A1_rx_parameters_pharm.csv"))
-if (nrow(A1_rx_parameters_pharm) == nrow(df_rx_list_input_data_subset)) {
+
+if (nrow(df_A1_rx_parameters_pharm) == nrow(df_rx_list_input_data_subset)) {
   print("All RX chunks created by A1_launcher_rx_data_compiler.R")
 } else {
   print("MISSING CHUNKS! COMPARE INPUT_DATA_SUBSET AGAINST A1_RX_PARAMETERS_PHARM.CSV")
 }
+
 
 ##----------------------------------------------------------------
 ## 2. Save CSVs with list of RX chunk filepaths & unique combinations for processing

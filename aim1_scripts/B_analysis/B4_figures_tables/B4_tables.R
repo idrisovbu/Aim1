@@ -205,12 +205,29 @@ fwrite(df_ms_t1, file.path(output_tables_dir, "MS_T1.csv"))
 # Set df
 df_ss_t1 <- data_list$`01.Summary_Statistics_inflation_adjusted_aggregated`
 
+# Load and clean the mapping file
+df_map <- read_csv("/mnt/share/dex/us_county/maps/causelist_figures.csv", show_col_types = FALSE) %>%
+  select(acause, acause_lvl2, cause_name_lvl2, acause_lvl1, cause_name_lvl1) %>%
+  mutate(
+    acause_lvl2      = if_else(acause == "hiv", "hiv", acause_lvl2),
+    cause_name_lvl2  = if_else(acause == "hiv", "HIV/AIDS", cause_name_lvl2),
+    acause_lvl2      = if_else(acause == "std", "std", acause_lvl2),
+    cause_name_lvl2  = if_else(acause == "std", "Sexually transmitted infections", cause_name_lvl2)
+  ) %>% select(-acause) %>% unique()
+
+# Join with df_map (cause map table)
+df_ss_t1 <- df_ss_t1 %>%
+  left_join(df_map, by = "acause_lvl2") 
+
+
+
 # Group by summary to get total counts based on toc
 df_ss_t1 <- df_ss_t1 %>%
-  group_by(acause_lvl2, has_hiv, has_sud, has_hepc, toc) %>%
+  group_by(acause_lvl2, cause_name_lvl2, has_hiv, has_sud, has_hepc, toc) %>%
   summarise(
     avg_cost_per_bene = weighted.mean(avg_cost_per_bene, w = total_unique_bene)
   )
+
 
 # Add labels for scenarios 
 df_ss_t1 <- df_ss_t1 %>%
@@ -233,7 +250,7 @@ df_ss_t1 <- df_ss_t1 %>%
 df_ss_t1 <- df_ss_t1 %>%
   ungroup() %>%
   filter(condition %in% c("None", "HIV", "SUD")) %>%
-  select(acause_lvl2, toc_condition, avg_cost_per_bene) %>%
+  select(acause_lvl2, cause_name_lvl2, toc_condition, avg_cost_per_bene) %>%
   pivot_wider(
     names_from = toc_condition,
     values_from = avg_cost_per_bene
@@ -251,9 +268,9 @@ ordered_cols <- unlist(lapply(toc_order, function(toc) {
 # Keep only the columns that exist
 ordered_cols <- ordered_cols[ordered_cols %in% names(df_ss_t1)]
 
-# Reorder columns with acause_lvl2 first
+# Reorder columns with cause_name_lvl2 first
 df_ss_t1 <- df_ss_t1 %>%
-  select(acause_lvl2, all_of(ordered_cols))
+  select(cause_name_lvl2, all_of(ordered_cols))
 
 # Covert to dollar amounts
 for (col in colnames(df_ss_t1)) {
@@ -264,8 +281,9 @@ for (col in colnames(df_ss_t1)) {
   }
 }
 
+
 # Rename acause_lvl2 -> Level 2 Cause
-df_ss_t1 <- rename(df_ss_t1, "Level 2 Cause" = "acause_lvl2")
+df_ss_t1 <- rename(df_ss_t1, "Level 2 Cause" = "cause_name_lvl2")
 
 # Save and output able as .csv
 fwrite(df_ss_t1, file.path(output_tables_dir, "SS_T1.csv"))
@@ -280,11 +298,21 @@ fwrite(df_ss_t1, file.path(output_tables_dir, "SS_T1.csv"))
 # Set df
 df_ss_t2 <- data_list$`01.Summary_Statistics_inflation_adjusted_aggregated`
 
-# Group by summary to get total counts based on age_group_years_start
 df_ss_t2 <- df_ss_t2 %>%
-  group_by(acause_lvl2, has_hiv, has_sud, has_hepc, age_group_years_start) %>%
+  left_join(df_map, by = "acause_lvl2") 
+
+# # Group by summary to get total counts based on age_group_years_start
+# df_ss_t2 <- df_ss_t2 %>%
+#   group_by(acause_lvl2, has_hiv, has_sud, has_hepc, age_group_years_start) %>%
+#   summarise(
+#     avg_cost_per_bene = weighted.mean(avg_cost_per_bene, w = total_unique_bene)
+#   )
+
+df_ss_t2 <- df_ss_t2 %>%
+  group_by(acause_lvl2, cause_name_lvl2, has_hiv, has_sud, has_hepc, age_group_years_start) %>%
   summarise(
-    avg_cost_per_bene = weighted.mean(avg_cost_per_bene, w = total_unique_bene)
+    avg_cost_per_bene = weighted.mean(avg_cost_per_bene, w = total_unique_bene),
+    .groups = "drop"
   )
 
 # Add labels for scenarios 
@@ -308,7 +336,7 @@ df_ss_t2 <- df_ss_t2 %>%
 df_ss_t2 <- df_ss_t2 %>%
   ungroup() %>%
   filter(condition %in% c("None", "HIV", "SUD")) %>%
-  select(acause_lvl2, age_condition, avg_cost_per_bene) %>%
+  select(acause_lvl2,cause_name_lvl2, age_condition, avg_cost_per_bene) %>%
   pivot_wider(
     names_from = age_condition,
     values_from = avg_cost_per_bene
@@ -326,13 +354,13 @@ ordered_cols_age <- unlist(lapply(age_order, function(age) {
 # Keep only the columns that exist
 ordered_cols_age <- ordered_cols_age[ordered_cols_age %in% names(df_ss_t2)]
 
-# Reorder columns with acause_lvl2 first
+# Reorder columns with acause_name_lvl2 first
 df_ss_t2 <- df_ss_t2 %>%
-  select(acause_lvl2, all_of(ordered_cols_age))
+  select(cause_name_lvl2, all_of(ordered_cols_age))
 
 # Covert to dollar amounts
 for (col in colnames(df_ss_t2)) {
-  if (col == "acause_lvl2") {
+  if (col == "cause_name_lvl2") {
     next
   } else {
     df_ss_t2[[col]] <- dollar(df_ss_t2[[col]])
@@ -340,7 +368,7 @@ for (col in colnames(df_ss_t2)) {
 }
 
 # Rename acause_lvl2 -> Level 2 Cause
-df_ss_t2 <- rename(df_ss_t2, "Level 2 Cause" = "acause_lvl2")
+df_ss_t2 <- rename(df_ss_t2, "Level 2 Cause" = "cause_name_lvl2")
 
 # Save and output able as .csv
 fwrite(df_ss_t2, file.path(output_tables_dir, "SS_T2.csv"))
@@ -355,9 +383,13 @@ fwrite(df_ss_t2, file.path(output_tables_dir, "SS_T2.csv"))
 # Set df
 df_ss_t3 <- data_list$`01.Summary_Statistics_inflation_adjusted_aggregated`
 
+# Join with df_map to bring in cause names
+df_ss_t3 <- df_ss_t3 %>%
+  left_join(df_map, by = "acause_lvl2") 
+
 # Group by summary to get total counts based on race
 df_ss_t3 <- df_ss_t3 %>%
-  group_by(acause_lvl2, has_hiv, has_sud, has_hepc, race_cd) %>%
+  group_by(acause_lvl2,cause_name_lvl2, has_hiv, has_sud, has_hepc, race_cd) %>%
   summarise(
     avg_cost_per_bene = weighted.mean(avg_cost_per_bene, w = total_unique_bene)
   )
@@ -383,7 +415,7 @@ df_ss_t3 <- df_ss_t3 %>%
 df_ss_t3 <- df_ss_t3 %>%
   ungroup() %>%
   filter(condition %in% c("None", "HIV", "SUD")) %>%
-  select(acause_lvl2, race_condition, avg_cost_per_bene) %>%
+  select(acause_lvl2, cause_name_lvl2, race_condition, avg_cost_per_bene) %>%
   pivot_wider(
     names_from = race_condition,
     values_from = avg_cost_per_bene
@@ -403,11 +435,11 @@ ordered_cols_race <- ordered_cols_race[ordered_cols_race %in% names(df_ss_t3)]
 
 # Reorder columns with acause_lvl2 first
 df_ss_t3 <- df_ss_t3 %>%
-  select(acause_lvl2, all_of(ordered_cols_race))
+  select(cause_name_lvl2, all_of(ordered_cols_race))
 
 # Covert to dollar amounts
 for (col in colnames(df_ss_t3)) {
-  if (col == "acause_lvl2") {
+  if (col == "cause_name_lvl2") {
     next
   } else {
     df_ss_t3[[col]] <- dollar(df_ss_t3[[col]])
@@ -415,7 +447,7 @@ for (col in colnames(df_ss_t3)) {
 }
 
 # Rename acause_lvl2 -> Level 2 Cause
-df_ss_t3 <- rename(df_ss_t3, "Level 2 Cause" = "acause_lvl2")
+df_ss_t3 <- rename(df_ss_t3, "Level 2 Cause" = "cause_name_lvl2")
 
 # Save and output able as .csv
 fwrite(df_ss_t3, file.path(output_tables_dir, "SS_T3.csv"))

@@ -148,6 +148,7 @@ df_bins_master <- df %>%
 ##----------------------------------------------------------------
 
 B <- bootstrap_iterations # Number of bootstrap iterations (default = 50)
+# passes by submit array launcher script 
 
 # Set seed
 set.seed(123)
