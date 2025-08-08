@@ -245,7 +245,8 @@ df_ss_t1 <- df_ss_t1 %>%
 df_ss_t1 <- df_ss_t1 %>%
   group_by(acause_lvl2, cause_name_lvl2, has_hiv, has_sud, has_hepc, toc) %>%
   summarise(
-    avg_cost_per_bene = weighted.mean(avg_cost_per_bene, w = total_unique_bene)
+    avg_cost_per_bene = weighted.mean(avg_cost_per_bene, w = total_unique_bene),
+    beneficiary_count = sum(total_unique_bene)
   )
 
 # Add labels for scenarios 
@@ -269,37 +270,58 @@ df_ss_t1 <- df_ss_t1 %>%
 df_ss_t1 <- df_ss_t1 %>%
   ungroup() %>%
   filter(condition %in% c("None", "HIV", "SUD")) %>%
-  select(acause_lvl2, cause_name_lvl2, toc_condition, avg_cost_per_bene) %>%
+  select(acause_lvl2, cause_name_lvl2, toc_condition, avg_cost_per_bene, beneficiary_count) %>%
   pivot_wider(
     names_from = toc_condition,
-    values_from = avg_cost_per_bene
+    values_from = c(avg_cost_per_bene, beneficiary_count)
   )
 
-# Define desired TOC and condition order
-toc_order <- c("AM", "ED", "HH", "IP", "NF", "RX")
-condition_order <- c("None", "HIV", "SUD", "HepC", "HIV + SUD", "HIV + HepC", "SUD + HepC", "HIV + SUD + HepC")
-
-# Build column names in desired order: TOC first, then condition
-ordered_cols <- unlist(lapply(toc_order, function(toc) {
-  paste(toc, "-", condition_order)
-}))
-
-# Keep only the columns that exist
-ordered_cols <- ordered_cols[ordered_cols %in% names(df_ss_t1)]
-
-# Reorder columns with cause_name_lvl2 first
-df_ss_t1 <- df_ss_t1 %>%
-  select(cause_name_lvl2, all_of(ordered_cols))
-
-# Covert to dollar amounts
+# Covert avg_cost_per_bene columns to dollar amounts
 for (col in colnames(df_ss_t1)) {
-  if (col == "cause_name_lvl2") {
+  if (col == "cause_name_lvl2" | col == "acause_lvl2") {
     next
-  } else {
+  } 
+  else if (str_detect(col, "beneficiary_count") == TRUE) { 
+    next
+  }
+  else {
     df_ss_t1[[col]] <- dollar(df_ss_t1[[col]])
   }
 }
 
+# Drop "acause_lvl2" column
+df_ss_t1 <- df_ss_t1 %>% select(-c(acause_lvl2))
+
+# Format columns
+ss_t1_keep_bin_counts <- T # Set to F if want to omit bin counts from cells
+
+toc_order <- c("AM", "ED", "HH", "IP", "NF", "RX")
+group_order <- c("None", "HIV", "SUD")
+
+ss_t1_new_cols <- list()
+
+for (toc in toc_order) {
+  for (grp in group_order) {
+    avg_col <- paste0("avg_cost_per_bene_", toc, " - ", grp)
+    count_col <- paste0("beneficiary_count_", toc, " - ", grp)
+    
+    # Check if both columns exist
+    if (all(c(avg_col, count_col) %in% colnames(df_ss_t1))) {
+      # Format dollar values and combine with count
+      if (ss_t1_keep_bin_counts) {
+        ss_t1_new_cols[[paste0(toc, " - ", grp)]] <- paste0(df_ss_t1[[avg_col]], " (n = ", df_ss_t1[[count_col]], ")")
+      } else {
+        ss_t1_new_cols[[paste0(toc, " - ", grp)]] <- paste0(df_ss_t1[[avg_col]])
+      }
+      
+    }
+  }
+}
+
+df_ss_t1 <- as.data.frame(ss_t1_new_cols, check.names = FALSE) %>% bind_cols(df_ss_t1["cause_name_lvl2"])
+
+# Reorder columns
+df_ss_t1 <- df_ss_t1 %>% select(cause_name_lvl2, everything())
 
 # Rename acause_lvl2 -> Level 2 Cause
 df_ss_t1 <- rename(df_ss_t1, "Level 2 Cause" = "cause_name_lvl2")
@@ -326,6 +348,7 @@ df_ss_t2 <- df_ss_t2 %>%
   group_by(acause_lvl2, cause_name_lvl2, has_hiv, has_sud, has_hepc, age_group_years_start) %>%
   summarise(
     avg_cost_per_bene = weighted.mean(avg_cost_per_bene, w = total_unique_bene),
+    beneficiary_count = sum(total_unique_bene),
     .groups = "drop"
   )
 
@@ -350,36 +373,58 @@ df_ss_t2 <- df_ss_t2 %>%
 df_ss_t2 <- df_ss_t2 %>%
   ungroup() %>%
   filter(condition %in% c("None", "HIV", "SUD")) %>%
-  select(acause_lvl2,cause_name_lvl2, age_condition, avg_cost_per_bene) %>%
+  select(acause_lvl2,cause_name_lvl2, age_condition, avg_cost_per_bene, beneficiary_count) %>%
   pivot_wider(
     names_from = age_condition,
-    values_from = avg_cost_per_bene
+    values_from = c(avg_cost_per_bene, beneficiary_count)
   )
 
-# Define desired TOC and condition order
-age_order <- c("65", "70", "75", "80", "85")
-condition_order <- c("None", "HIV", "SUD", "HepC", "HIV + SUD", "HIV + HepC", "SUD + HepC", "HIV + SUD + HepC")
-
-# Build column names in desired order: TOC first, then condition
-ordered_cols_age <- unlist(lapply(age_order, function(age) {
-  paste(age, "-", condition_order)
-}))
-
-# Keep only the columns that exist
-ordered_cols_age <- ordered_cols_age[ordered_cols_age %in% names(df_ss_t2)]
-
-# Reorder columns with acause_name_lvl2 first
-df_ss_t2 <- df_ss_t2 %>%
-  select(cause_name_lvl2, all_of(ordered_cols_age))
-
-# Covert to dollar amounts
+# Covert avg_cost_per_bene columns to dollar amounts
 for (col in colnames(df_ss_t2)) {
-  if (col == "cause_name_lvl2") {
+  if (col == "cause_name_lvl2" | col == "acause_lvl2") {
     next
-  } else {
+  } 
+  else if (str_detect(col, "beneficiary_count") == TRUE) { 
+    next
+  }
+  else {
     df_ss_t2[[col]] <- dollar(df_ss_t2[[col]])
   }
 }
+
+# Drop "acause_lvl2" column
+df_ss_t2 <- df_ss_t2 %>% select(-c(acause_lvl2))
+
+# Format columns
+ss_t2_keep_bin_counts <- T # Set to F if want to omit bin counts from cells
+
+age_order <- c("65", "70", "75", "80", "85")
+group_order <- c("None", "HIV", "SUD")
+
+ss_t2_new_cols <- list()
+
+for (age in age_order) {
+  for (grp in group_order) {
+    avg_col <- paste0("avg_cost_per_bene_", age, " - ", grp)
+    count_col <- paste0("beneficiary_count_", age, " - ", grp)
+    
+    # Check if both columns exist
+    if (all(c(avg_col, count_col) %in% colnames(df_ss_t2))) {
+      # Format dollar values and combine with count
+      if (ss_t2_keep_bin_counts) {
+        ss_t2_new_cols[[paste0(age, " - ", grp)]] <- paste0(df_ss_t2[[avg_col]], " (n = ", df_ss_t2[[count_col]], ")")
+      } else {
+        ss_t2_new_cols[[paste0(age, " - ", grp)]] <- paste0(df_ss_t2[[avg_col]])
+      }
+      
+    }
+  }
+}
+
+df_ss_t2 <- as.data.frame(ss_t2_new_cols, check.names = FALSE) %>% bind_cols(df_ss_t2["cause_name_lvl2"])
+
+# Reorder columns
+df_ss_t2 <- df_ss_t2 %>% select(cause_name_lvl2, everything())
 
 # Rename acause_lvl2 -> Level 2 Cause
 df_ss_t2 <- rename(df_ss_t2, "Level 2 Cause" = "cause_name_lvl2")
@@ -405,7 +450,8 @@ df_ss_t3 <- df_ss_t3 %>%
 df_ss_t3 <- df_ss_t3 %>%
   group_by(acause_lvl2,cause_name_lvl2, has_hiv, has_sud, has_hepc, race_cd) %>%
   summarise(
-    avg_cost_per_bene = weighted.mean(avg_cost_per_bene, w = total_unique_bene)
+    avg_cost_per_bene = weighted.mean(avg_cost_per_bene, w = total_unique_bene),
+    beneficiary_count = sum(total_unique_bene)
   )
 
 # Add labels for scenarios 
@@ -429,36 +475,58 @@ df_ss_t3 <- df_ss_t3 %>%
 df_ss_t3 <- df_ss_t3 %>%
   ungroup() %>%
   filter(condition %in% c("None", "HIV", "SUD")) %>%
-  select(acause_lvl2, cause_name_lvl2, race_condition, avg_cost_per_bene) %>%
+  select(acause_lvl2, cause_name_lvl2, race_condition, avg_cost_per_bene, beneficiary_count) %>%
   pivot_wider(
     names_from = race_condition,
-    values_from = avg_cost_per_bene
+    values_from = c(avg_cost_per_bene, beneficiary_count)
   )
 
-# Define desired TOC and condition order
-race_order <- c("WHT", "BLCK", "HISP")
-condition_order <- c("None", "HIV", "SUD", "HepC", "HIV + SUD", "HIV + HepC", "SUD + HepC", "HIV + SUD + HepC")
-
-# Build column names in desired order: TOC first, then condition
-ordered_cols_race <- unlist(lapply(race_order, function(race) {
-  paste(race, "-", condition_order)
-}))
-
-# Keep only the columns that exist
-ordered_cols_race <- ordered_cols_race[ordered_cols_race %in% names(df_ss_t3)]
-
-# Reorder columns with acause_lvl2 first
-df_ss_t3 <- df_ss_t3 %>%
-  select(cause_name_lvl2, all_of(ordered_cols_race))
-
-# Covert to dollar amounts
+# Covert avg_cost_per_bene columns to dollar amounts
 for (col in colnames(df_ss_t3)) {
-  if (col == "cause_name_lvl2") {
+  if (col == "cause_name_lvl2" | col == "acause_lvl2") {
     next
-  } else {
+  } 
+  else if (str_detect(col, "beneficiary_count") == TRUE) { 
+    next
+  }
+  else {
     df_ss_t3[[col]] <- dollar(df_ss_t3[[col]])
   }
 }
+
+# Drop "acause_lvl2" column
+df_ss_t3 <- df_ss_t3 %>% select(-c(acause_lvl2))
+
+# Format columns
+ss_t3_keep_bin_counts <- T # Set to F if want to omit bin counts from cells
+
+race_order <- c("WHT", "BLCK", "HISP")
+group_order <- c("None", "HIV", "SUD")
+
+ss_t3_new_cols <- list()
+
+for (race in race_order) {
+  for (grp in group_order) {
+    avg_col <- paste0("avg_cost_per_bene_", race, " - ", grp)
+    count_col <- paste0("beneficiary_count_", race, " - ", grp)
+    
+    # Check if both columns exist
+    if (all(c(avg_col, count_col) %in% colnames(df_ss_t3))) {
+      # Format dollar values and combine with count
+      if (ss_t3_keep_bin_counts) {
+        ss_t3_new_cols[[paste0(race, " - ", grp)]] <- paste0(df_ss_t3[[avg_col]], " (n = ", df_ss_t3[[count_col]], ")")
+      } else {
+        ss_t3_new_cols[[paste0(race, " - ", grp)]] <- paste0(df_ss_t3[[avg_col]])
+      }
+      
+    }
+  }
+}
+
+df_ss_t3 <- as.data.frame(ss_t3_new_cols, check.names = FALSE) %>% bind_cols(df_ss_t3["cause_name_lvl2"])
+
+# Reorder columns
+df_ss_t3 <- df_ss_t3 %>% select(cause_name_lvl2, everything())
 
 # Rename acause_lvl2 -> Level 2 Cause
 df_ss_t3 <- rename(df_ss_t3, "Level 2 Cause" = "cause_name_lvl2")
