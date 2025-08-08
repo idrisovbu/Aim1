@@ -35,11 +35,13 @@ if (dir.exists("/mnt/share/limited_use")) {
   base_dir <- "C:/Users/aches/Desktop/Stuff/Coding/Aim1WD/"
   input_dir <- file.path(base_dir, "05.Aggregation_Summary/bested/")
   output_tables_dir <- file.path(base_dir, "07.Tables/", date_today)
+  resources_dir <- file.path(base_dir, "resources/")
 }
 
 # Create output directory for today's date
 if (!dir.exists(base_dir)) dir.create(base_dir, recursive = TRUE)
 if (!dir.exists(output_tables_dir)) dir.create(output_tables_dir, recursive = TRUE)
+if (!dir.exists(resources_dir)) dir.create(resources_dir, recursive = TRUE)
 
 ##----------------------------------------------------------------
 ## 0.1 Functions
@@ -50,6 +52,7 @@ convert_colnames_general <- function(colnames_vec) {
   sapply(colnames_vec, function(name) {
     # Special case for cause column
     if (grepl("^acause_lvl2\\s*$", name)) return("Level 2 Cause")
+    if (grepl("^cause_name_lvl2\\s*$", name)) return("Level 2 Cause")
     
     # Split column name
     parts <- strsplit(name, "_")[[1]]
@@ -108,6 +111,32 @@ weighted_mean_all <- function(df, group_cols, value_cols, weight_col) {
 }
 
 ##----------------------------------------------------------------
+## 0.2 Load in Cause Map File
+##----------------------------------------------------------------
+
+# Load and clean the mapping file
+# Detect IHME cluster by checking for /mnt/share/limited_use
+if (dir.exists("/mnt/share/limited_use")) {
+  fp_cause_map <- "/mnt/share/dex/us_county/maps/causelist_figures.csv"
+} else {
+  # Mac
+  # TBD
+  
+  # Windows
+  fp_cause_map <- file.path(resources_dir, "acause_mapping_table.csv")
+}
+
+# Read in cause_map
+df_map <- read_csv(fp_cause_map, show_col_types = FALSE) %>%
+  select(acause, acause_lvl2, cause_name_lvl2, acause_lvl1, cause_name_lvl1) %>%
+  mutate(
+    acause_lvl2      = if_else(acause == "hiv", "hiv", acause_lvl2),
+    cause_name_lvl2  = if_else(acause == "hiv", "HIV/AIDS", cause_name_lvl2),
+    acause_lvl2      = if_else(acause == "std", "std", acause_lvl2),
+    cause_name_lvl2  = if_else(acause == "std", "Sexually transmitted infections", cause_name_lvl2)
+  ) %>% select(-acause) %>% unique()
+
+##----------------------------------------------------------------
 ## 1. Read in bested 05.Aggregation_Summary data
 ##----------------------------------------------------------------
 
@@ -128,6 +157,9 @@ for (file in file_list) {
 
 ##----------------------------------------------------------------
 ## 2.1 MS_T1 - HIV, SUD, Hepc prevalence total, by year, toc age (percentages)
+##
+## Rows: Year
+## Columns: Total Unique Bene, Total Unique HIV Bene (count / %), Total Unique SUD Bene (count / %)
 ##
 ## This table uses the meta statistics outputs to sum the total beneficiaries by scenario (hiv, sud, hepc, and the combos)
 ## and calculate percentages for how many unique beneficiaries there are out of the group total, summarized by year_id
@@ -205,21 +237,9 @@ fwrite(df_ms_t1, file.path(output_tables_dir, "MS_T1.csv"))
 # Set df
 df_ss_t1 <- data_list$`01.Summary_Statistics_inflation_adjusted_aggregated`
 
-# Load and clean the mapping file
-df_map <- read_csv("/mnt/share/dex/us_county/maps/causelist_figures.csv", show_col_types = FALSE) %>%
-  select(acause, acause_lvl2, cause_name_lvl2, acause_lvl1, cause_name_lvl1) %>%
-  mutate(
-    acause_lvl2      = if_else(acause == "hiv", "hiv", acause_lvl2),
-    cause_name_lvl2  = if_else(acause == "hiv", "HIV/AIDS", cause_name_lvl2),
-    acause_lvl2      = if_else(acause == "std", "std", acause_lvl2),
-    cause_name_lvl2  = if_else(acause == "std", "Sexually transmitted infections", cause_name_lvl2)
-  ) %>% select(-acause) %>% unique()
-
 # Join with df_map (cause map table)
 df_ss_t1 <- df_ss_t1 %>%
   left_join(df_map, by = "acause_lvl2") 
-
-
 
 # Group by summary to get total counts based on toc
 df_ss_t1 <- df_ss_t1 %>%
@@ -227,7 +247,6 @@ df_ss_t1 <- df_ss_t1 %>%
   summarise(
     avg_cost_per_bene = weighted.mean(avg_cost_per_bene, w = total_unique_bene)
   )
-
 
 # Add labels for scenarios 
 df_ss_t1 <- df_ss_t1 %>%
@@ -274,7 +293,7 @@ df_ss_t1 <- df_ss_t1 %>%
 
 # Covert to dollar amounts
 for (col in colnames(df_ss_t1)) {
-  if (col == "acause_lvl2") {
+  if (col == "cause_name_lvl2") {
     next
   } else {
     df_ss_t1[[col]] <- dollar(df_ss_t1[[col]])
@@ -298,16 +317,11 @@ fwrite(df_ss_t1, file.path(output_tables_dir, "SS_T1.csv"))
 # Set df
 df_ss_t2 <- data_list$`01.Summary_Statistics_inflation_adjusted_aggregated`
 
+# Join with df_map (cause map table)
 df_ss_t2 <- df_ss_t2 %>%
   left_join(df_map, by = "acause_lvl2") 
 
-# # Group by summary to get total counts based on age_group_years_start
-# df_ss_t2 <- df_ss_t2 %>%
-#   group_by(acause_lvl2, has_hiv, has_sud, has_hepc, age_group_years_start) %>%
-#   summarise(
-#     avg_cost_per_bene = weighted.mean(avg_cost_per_bene, w = total_unique_bene)
-#   )
-
+# Group by summary to get total counts based on age_group_years_start
 df_ss_t2 <- df_ss_t2 %>%
   group_by(acause_lvl2, cause_name_lvl2, has_hiv, has_sud, has_hepc, age_group_years_start) %>%
   summarise(
@@ -464,7 +478,7 @@ df_tpe_t1 <- data_list$`04.Two_Part_Estimates_inflation_adjusted_aggregated_unfi
 
 # Group by summary to get 
 df_tpe_t1 <- df_tpe_t1 %>%
-  group_by(acause_lvl2, toc) %>%
+  group_by(cause_name_lvl2, toc) %>%
   summarise(
     mean_cost = weighted.mean(mean_cost, w = total_row_count, na.rm = TRUE),
     lower_ci = weighted.mean(lower_ci, w = total_row_count, na.rm = TRUE),
@@ -479,7 +493,7 @@ df_tpe_t1 <- df_tpe_t1 %>%
 
 # Covert to dollar amounts
 for (col in colnames(df_tpe_t1)) {
-  if (col == "acause_lvl2" | col == "toc") {
+  if (col == "cause_name_lvl2" | col == "toc") {
     next
   } else {
     df_tpe_t1[[col]] <- dollar(df_tpe_t1[[col]])
@@ -520,7 +534,7 @@ ordered_cols_tpe_t1 <- unlist(
 
 # Reorder columns with acause_lvl2 first
 df_tpe_t1 <- df_tpe_t1 %>%
-  select(acause_lvl2, all_of(ordered_cols_tpe_t1))
+  select(cause_name_lvl2, all_of(ordered_cols_tpe_t1))
 
 converted_names <- convert_colnames_general(colnames(df_tpe_t1))
 
@@ -541,7 +555,7 @@ df_tpe_t2 <- data_list$`04.Two_Part_Estimates_inflation_adjusted_aggregated_unfi
 
 # Group by summary to get 
 df_tpe_t2 <- df_tpe_t2 %>%
-  group_by(acause_lvl2, age_group_years_start) %>%
+  group_by(cause_name_lvl2, age_group_years_start) %>%
   summarise(
     mean_cost = weighted.mean(mean_cost, w = total_row_count, na.rm = TRUE),
     lower_ci = weighted.mean(lower_ci, w = total_row_count, na.rm = TRUE),
@@ -556,7 +570,7 @@ df_tpe_t2 <- df_tpe_t2 %>%
 
 # Covert to dollar amounts
 for (col in colnames(df_tpe_t2)) {
-  if (col == "acause_lvl2" | col == "age_group_years_start") {
+  if (col == "cause_name_lvl2" | col == "age_group_years_start") {
     next
   } else {
     df_tpe_t2[[col]] <- dollar(df_tpe_t2[[col]])
@@ -597,7 +611,7 @@ ordered_cols_tpe_t2 <- unlist(
 
 # Reorder columns with acause_lvl2 first
 df_tpe_t2 <- df_tpe_t2 %>%
-  select(acause_lvl2, all_of(ordered_cols_tpe_t2))
+  select(cause_name_lvl2, all_of(ordered_cols_tpe_t2))
 
 # Rename column names
 converted_names <- convert_colnames_general(colnames(df_tpe_t2))
@@ -619,7 +633,7 @@ df_tpe_t3 <- data_list$`04.Two_Part_Estimates_inflation_adjusted_aggregated_unfi
 
 # Group by summary to get 
 df_tpe_t3 <- df_tpe_t3 %>%
-  group_by(acause_lvl2, race_cd) %>%
+  group_by(cause_name_lvl2, race_cd) %>%
   summarise(
     mean_cost = weighted.mean(mean_cost, w = total_row_count, na.rm = TRUE),
     lower_ci = weighted.mean(lower_ci, w = total_row_count, na.rm = TRUE),
@@ -634,7 +648,7 @@ df_tpe_t3 <- df_tpe_t3 %>%
 
 # Covert to dollar amounts
 for (col in colnames(df_tpe_t3)) {
-  if (col == "acause_lvl2" | col == "race_cd") {
+  if (col == "cause_name_lvl2" | col == "race_cd") {
     next
   } else {
     df_tpe_t3[[col]] <- dollar(df_tpe_t3[[col]])
@@ -675,7 +689,7 @@ ordered_cols_tpe_t3 <- unlist(
 
 # Reorder columns with acause_lvl2 first
 df_tpe_t3 <- df_tpe_t3 %>%
-  select(acause_lvl2, all_of(ordered_cols_tpe_t3))
+  select(cause_name_lvl2, all_of(ordered_cols_tpe_t3))
 
 # Rename column names
 converted_names <- convert_colnames_general(colnames(df_tpe_t3))
