@@ -105,7 +105,8 @@ df <- rbindlist(df_list, use.names = TRUE, fill = TRUE)
 
 # Save beneficiary-level flags
 hiv_benes <- unique(df[acause == "hiv", .(bene_id)][, has_hiv := 1L])
-sud_benes <- unique(df[grepl("^mental_", acause), .(bene_id)][, has_sud := 1L])
+sud_benes <- unique(
+  df[acause %in% c("mental_alcohol", "mental_drug_agg", "mental_drug_opioids"), .(bene_id)][, has_sud := 1L])
 hepc_benes <- unique(df[acause == "hepatitis_c", .(bene_id)][, has_hepc := 1L])
 
 ##----------------------------------------------------------------
