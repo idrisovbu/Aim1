@@ -115,7 +115,7 @@ for (i in 1:nrow(data_dirs)) {
   # Step 1: Save flags BEFORE filtering
   hiv_benes <- unique(dt[acause == "hiv", .(bene_id)][, has_hiv := 1L])
   sud_benes <- unique(
-    df[acause %in% c("mental_alcohol", "mental_drug_agg", "mental_drug_opioids"), .(bene_id)][, has_sud := 1L])
+    dt[acause %in% c("mental_alcohol", "mental_drug_agg", "mental_drug_opioids"), .(bene_id)][, has_sud := 1L])
   hepc_benes <- unique(dt[acause == "hepatitis_c", .(bene_id)][, has_hepc := 1L])
   
   # Step 2: Filter to primary cause only
