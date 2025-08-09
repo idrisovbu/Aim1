@@ -36,7 +36,7 @@ if (interactive()) {
   path <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/bested/aggregated_by_year/compiled_RX_data_2010_age65.parquet"
   #path <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/bested/aggregated_by_year/compiled_F2T_data_2010_age65.parquet"
   # df <- read_parquet(path) %>% sample_n(10000) # This loads the whole dataset in and takes a long time
-  df <- open_dataset(path) #%>% head(100000) %>% collect() %>% sample_n(10000) # Only reads first 100,000 rows, then samples 10,000, much faster
+  df <- open_dataset(path) %>% collect() #%>% head(100000) %>% collect() %>% sample_n(10000) # Only reads first 100,000 rows, then samples 10,000, much faster
   df <- as.data.table(df)  
   year_id <- 2010
   file_type <- "RX"
@@ -113,14 +113,10 @@ ensure_dir_exists(log_folder)
 ##----------------------------------------------------------------
 ## 2. Convert key variables to factors for modeling purposes
 ##----------------------------------------------------------------
-# --- Assign explicit factor variable for toc ---
-toc_levels <- c("AM", "ED", "HH", "IP", "NF", "RX")
-
 df[, `:=`(
   acause_lvl2   = factor(acause_lvl2),
   race_cd       = factor(race_cd),
   sex_id        = factor(sex_id),
-  toc_fact      = factor(as.character(toc), levels = toc_levels),         
   has_hiv       = factor(has_hiv, levels = c(0, 1)),
   has_sud       = factor(has_sud, levels = c(0, 1)),
   has_hepc      = factor(has_hepc, levels = c(0, 1)),

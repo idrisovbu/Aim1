@@ -48,7 +48,6 @@ df_params <- data.frame(directory = input_files) %>%
     age_group_years_start = as.numeric(str_extract(basename(directory), "(?<=_age)\\d+"))
   ) %>%
   filter(!is.na(year_id)) %>%
-  filter(file_type == "F2T") %>% # Only filter on F2T data
   filter(year_id %in% c(2000, 2010, 2014, 2015, 2016, 2019)) # 2000, 2010, 2014, 2015, 2016, 2019 -> These years have the full data for all types of care (excl. RX)
 
 # Write CSV for full job param list
@@ -67,7 +66,8 @@ log_dir <- file.path(l, "LU_CMS/DEX/hivsud/aim1/B_analysis/logs")
 dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
 
 # Set number of bootstrap iterations
-bootstrap_iterations <- 100
+bootstrap_iterations_F2T <- 3
+bootstrap_iterations_RX <- 3
 ### Aug 4 run in 100 boot interations
 ### 48 hours 
 
@@ -78,16 +78,16 @@ bootstrap_iterations <- 100
 jid <- SUBMIT_ARRAY_JOB(
   name = "B1_two_part",
   script = script_path,
-  args = c(fp_parameters, bootstrap_iterations),
+  args = c(fp_parameters, bootstrap_iterations_F2T, bootstrap_iterations_RX),
   error_dir = log_dir,
   output_dir = log_dir,
   queue = "long.q",
   n_jobs = nrow(df_params),
   memory = "150G", # 200 needed for F2T @ 50 Bootstrap iterations 
   threads = 1,
-  time = "48:00:00", # 24:00:00 is needed for F2T @ 50 Bootstrap iterations
+  time = "5:00:00", # 24:00:00 is needed for F2T @ 50 Bootstrap iterations
   ## long.q is 384H (2 weeks) if its under 72 then do all.q #https://docs.cluster.ihme.washington.edu/#hpc-execution-host-hardware-specifications
   user_email = paste0(user, "@uw.edu"),
   archive = FALSE,
-  test = F  # T for Testing, F (false) for Full run
+  test = T  # T for Testing, F (false) for Full run
 )

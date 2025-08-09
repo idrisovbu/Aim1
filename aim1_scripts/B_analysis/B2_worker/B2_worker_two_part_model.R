@@ -41,7 +41,8 @@ if (interactive()) {
   year_id <- 2010
   file_type <- "F2T"
   age_group_years_start <- df$age_group_years_start[1]
-  bootstrap_iterations <- 1
+  bootstrap_iterations_F2T <- 1
+  bootstrap_iterations_RX <- 1
   
   # Optional code to remove low count acause_lvl2 and fix factors only having 0's or 1's
   # # remove low count ones
@@ -58,7 +59,8 @@ if (interactive()) {
   # Read job args from SUBMIT_ARRAY_JOB
   args <- commandArgs(trailingOnly = TRUE)
   fp_parameters_input <- args[1]
-  bootstrap_iterations <- as.integer(args[2])
+  bootstrap_iterations_F2T <- as.integer(args[2])
+  bootstrap_iterations_RX <- as.integer(args[3])
   
   # Identify row using SLURM array task ID
   array_job_number <- as.integer(Sys.getenv("SLURM_ARRAY_TASK_ID"))
@@ -141,7 +143,13 @@ df_bins_master <- df %>%
 ##----------------------------------------------------------------
 ## 4. Bootstrap
 ##----------------------------------------------------------------
-B <- bootstrap_iterations
+if (file_type == "F2T") {
+  B <- bootstrap_iterations_F2T
+} else if (file_type == "RX") {
+  B <- bootstrap_iterations_RX
+} else {
+  B <- 1
+}
 set.seed(123)
 
 for (b in seq_len(B)) {
