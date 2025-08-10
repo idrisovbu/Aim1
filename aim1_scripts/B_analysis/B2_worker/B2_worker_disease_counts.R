@@ -193,13 +193,12 @@ cat("Summary statistics saved to:", out_path_summary, "\n")
 ##----------------------------------------------------------------
 
 # Ensure factor levels are established
-toc_levels <- c("AM", "ED", "HH", "IP", "NF", "RX")
+#toc_levels <- c("AM", "ED", "HH", "IP", "NF", "RX")
 
 df_input[, `:=`(
   acause_lvl2   = factor(acause_lvl2),
   race_cd       = factor(race_cd),
   sex_id        = factor(sex_id),
-  toc_fact      = factor(as.character(toc), levels = toc_levels),         
   has_hiv       = factor(has_hiv, levels = c(0, 1)),
   has_sud       = factor(has_sud, levels = c(0, 1)),
   has_hepc      = factor(has_hepc, levels = c(0, 1)),
@@ -211,17 +210,17 @@ df_input[, `:=`(
 valid_toc_levels <- df_input[, unique(na.omit(as.character(toc)))]
 n_unique_toc <- length(valid_toc_levels)
 
-if (n_unique_toc < 2 & file_type != "RX") {
-  msg <- paste0(
-    "❌ REGRESSION HALTED\n",
-    "Reason: Less than 2 levels of toc present\n",
-    "Year: ", year_id, " | Age group: ", age_group_years_start, "\n",
-    "Available toc levels: ", paste(valid_toc_levels, collapse = ", "), "\n",
-    "Timestamp: ", Sys.time(), "\n"
-  )
-  writeLines(msg, con = log_file)
-  stop("Insufficient toc variation for regression (see log).")
-}
+# if (n_unique_toc < 2 & file_type != "RX") {
+#   msg <- paste0(
+#     "❌ REGRESSION HALTED\n",
+#     "Reason: Less than 2 levels of toc present\n",
+#     "Year: ", year_id, " | Age group: ", age_group_years_start, "\n",
+#     "Available toc levels: ", paste(valid_toc_levels, collapse = ", "), "\n",
+#     "Timestamp: ", Sys.time(), "\n"
+#   )
+#   writeLines(msg, con = log_file)
+#   stop("Insufficient toc variation for regression (see log).")
+# }
 
 # Skip iterations with low factor level diversity
 if (nlevels(droplevels(df_input$has_hiv)) < 2 ||
@@ -233,73 +232,26 @@ if (nlevels(droplevels(df_input$has_hiv)) < 2 ||
 
 #### Set regression formulas
 # Logistic model (toc_fact removed for RX)
-mod_logit <- if (file_type == "RX") {
-  glm(has_cost ~ acause_lvl2 * has_hiv + acause_lvl2 * has_sud + race_cd + sex_id,
-      data = df_input, family = binomial(link = "logit"))
-} else {
-  glm(has_cost ~ acause_lvl2 * has_hiv + acause_lvl2 * has_sud + race_cd + sex_id + toc_fact,
-      data = df_input, family = binomial(link = "logit"))
-}
+mod_logit <- glm(
+  has_cost ~ acause_lvl2 * has_hiv +
+    acause_lvl2 * has_sud +
+    race_cd + sex_id,
+  data   = df_input,
+  family = binomial(link = "logit"))
 
 # Gamma input
 df_gamma_input <- df_input[tot_pay_amt > 0]
 df_gamma_input[, tot_pay_amt := pmin(tot_pay_amt, quantile(tot_pay_amt, 0.995, na.rm = TRUE))]
 
-# Gamma model (toc_fact removed for RX)
-mod_gamma <- if (file_type == "RX") {
-  glm(tot_pay_amt ~ acause_lvl2 * has_hiv + acause_lvl2 * has_sud + race_cd + sex_id,
-      data = df_gamma_input, family = Gamma(link = "log"), control = glm.control(maxit = 100))
-} else {
-  glm(tot_pay_amt ~ acause_lvl2 * has_hiv + acause_lvl2 * has_sud + race_cd + sex_id + toc_fact,
-      data = df_gamma_input, family = Gamma(link = "log"), control = glm.control(maxit = 100))
-}
-
-######## Need consult to resolve how regression_summary should look ######## 
-# # Create prediction grid with metadata
-# prediction_grid <- df_input %>%
-#   distinct(acause_lvl2, race_cd, sex_id, age_group_years_start, toc_fact) %>%
-#   crossing(has_hiv = factor(c(0, 1), levels = levels(df_input$has_hiv))) %>%
-#   crossing(has_sud = factor(c(0, 1), levels = levels(df_input$has_sud)))
-# 
-# # Predict expected cost
-# prediction_grid <- prediction_grid %>%
-#   mutate(
-#     prob_has_cost = predict(mod_logit, newdata = ., type = "response"),
-#     cost_if_pos   = predict(mod_gamma, newdata = ., type = "response"),
-#     exp_cost      = prob_has_cost * cost_if_pos
-#   )
-# 
-# # Summarize predictions # Is this how the table should look? Not sure
-# regression_summary <- prediction_grid %>%
-#   group_by(acause_lvl2, race_cd, age_group_years_start, toc_fact, has_hiv, has_sud) %>%
-#   summarise(predicted_cost = mean(exp_cost), .groups = "drop") %>%
-# pivot_wider(
-#   id_cols = c(acause_lvl2, race_cd, age_group_years_start, toc_fact),
-#   names_from = c(has_hiv, has_sud),
-#   values_from = predicted_cost,
-#   names_glue = "cost_hiv{has_hiv}_sud{has_sud}"
-# )
-# 
-# # Old code below
-# regression_summary <- prediction_grid %>%
-#   group_by(acause_lvl2, race_cd, age_group_years_start, toc_fact, has_hiv, has_sud) %>%
-#   summarise(predicted_cost = mean(exp_cost), .groups = "drop") %>%
-#   pivot_wider(
-#     names_from = has_hiv,
-#     values_from = predicted_cost,
-#     names_prefix = "cost_hiv_",
-#   ) %>%
-#   mutate(
-#     cost_hiv_delta = cost_hiv_1 - cost_hiv_0,
-#     year_id = year_id,
-#     file_type = file_type
-#   )
-# 
-# # Save regression summary table
-# file_out_summary <- generate_filename("regression_summary_estimates", ".csv")
-# out_path_summary <- file.path(regression_estimates_folder, file_out_summary)
-# write_csv(regression_summary, out_path_summary)
-# cat("✅ Summary predictions saved to:", out_path_summary, "\n")
+# Gamma model 
+mod_gamma <- glm(
+  tot_pay_amt ~ acause_lvl2 * has_hiv +
+    acause_lvl2 * has_sud +
+    race_cd + sex_id,
+  data    = df_gamma_input,
+  family  = Gamma(link = "log"),
+  control = glm.control(maxit = 100)
+)
 
 
 ##----------------------------------------------------------------
@@ -354,3 +306,4 @@ save_model_summary(mod_logit, "logit", regression_estimates_folder)
 save_model_summary(mod_gamma, "gamma", regression_estimates_folder)
 
 message("Job ended at: ", Sys.time())
+
