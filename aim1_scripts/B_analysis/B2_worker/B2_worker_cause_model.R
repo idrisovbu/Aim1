@@ -1,9 +1,52 @@
 ##----------------------------------------------------------------
-##' Title: B2_worker_two_part_model.R
-##' Notes: # For the future check bootstrap for finite populations
-##' Outputs: /mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/04.Two_Part_Estimates/<date>/bootstrap_results/
-##'          /mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/04.Two_Part_Estimates/<date>/boot_chunks/
+## Title: B2_worker_cause_model.R
+##
+## Purpose:
+##   Run a cause-specific two-part cost model (logit + gamma) with bootstrap
+##   resampling, standardize predictions over (race, sex, age) bins, and write
+##   per-cause results to disk. This script is designed to be called either
+##   sequentially (looping over causes) or from a SLURM array where each task
+##   handles one cause.
+##
+## What the script does (high level):
+##   1) For a given acause_lvl2 (“cause”), filter the data to that cause.
+##   2) Build standardization bins over (race_cd, sex_id, age_group_years_start)
+##      and compute weights (prop_bin) within each (race, age) to collapse over sex later.
+##   3) For B bootstrap iterations:
+##        - Resample rows with replacement.
+##        - Fit Part 1 (logit): has_cost ~ has_hiv + has_sud + race_cd + sex_id
+##        - Fit Part 2 (gamma with log link): tot_pay_amt ~ has_hiv + has_sud + race_cd + sex_id
+##          on positive costs (truncated at 99.5% to reduce outlier influence).
+##        - Predict expected cost for all combinations of (has_hiv ∈ {0,1}, has_sud ∈ {0,1})
+##          across the standardized bin grid.
+##        - Standardize by weighting predictions with prop_bin and collapse over sex.
+##        - Save each iteration’s results (parquet) under the cause’s boot_chunks folder.
+##   4) Combine bootstrap iterations and compute means and 95% quantile CIs for:
+##        cost_neither, cost_hiv_only, cost_sud_only, cost_hiv_sud,
+##        and their deltas vs. cost_neither.
+##   5) Write the per-cause summary CSV under the cause’s results folder.
+##
+## Inputs (expected in environment or passed in):
+##   - df: table with columns acause_lvl2, race_cd, sex_id, has_hiv, has_sud,
+##         has_cost, tot_pay_amt, age_group_years_start.
+##   - file_type: "F2T" or "RX" (affects B selection and filenames).
+##   - year_id: analysis year.
+##   - age_group_years_start: starting age of the analysis group.
+##   - bootstrap_iterations_F2T / bootstrap_iterations_RX: integers for B.
+##
+## Outputs (date-stamped run directory):
+##   /mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/
+##     04.Two_Part_Estimates/<YYYYMMDD>/by_cause/<cause_slug>/
+##       ├── boot_chunks/          # parquet files per bootstrap iteration
+##       └── results/
+##           └── bootstrap_marginal_results_<meta>.csv
+##
+## Notes:
+##   - Iterations with no variation in has_hiv or has_sud are skipped.
+##   - If all iterations are skipped for a cause, summary is not written.
+##   - For cluster reproducibility, consider seeding per cause/array task.
 ##----------------------------------------------------------------
+
 
 # Clear environment and set library paths
 rm(list = ls())
@@ -44,25 +87,13 @@ if (interactive()) {
   bootstrap_iterations_F2T <- 1
   bootstrap_iterations_RX <- 1
   
-  # Optional code to remove low count acause_lvl2 and fix factors only having 0's or 1's
-  # # remove low count ones
-  # count <- df %>% count(acause_lvl2)
-  # keep_cause <- count[order(-n)]$acause_lvl2[1:(length(count$acause_lvl2) - 6)]
-  # df <- df[df$acause_lvl2 %in% keep_cause, ]
-  # 
-  # # fix 0 and 1 factor to be more even
-  # df[1:5000, sex_id := 0]
-  # df[1:2500, has_hiv := 1]
-  # df[2500:7500, has_sud := 0]
   
 } else {
-  # Read job args from SUBMIT_ARRAY_JOB
   args <- commandArgs(trailingOnly = TRUE)
-  fp_parameters_input <- args[1]
-  bootstrap_iterations_F2T <- as.integer(args[2])
-  bootstrap_iterations_RX <- as.integer(args[3])
+  fp_parameters_input       <- args[1]
+  bootstrap_iterations_F2T  <- as.integer(args[2])
+  bootstrap_iterations_RX   <- as.integer(args[3])
   
-  # Identify row using SLURM array task ID
   array_job_number <- as.integer(Sys.getenv("SLURM_ARRAY_TASK_ID"))
   message("SLURM Job ID: ", array_job_number)
   
@@ -71,10 +102,11 @@ if (interactive()) {
   
   fp_input <- df_job$directory
   file_type <- df_job$file_type
-  year_id <- df_job$year_id
+  year_id   <- df_job$year_id
+  cause_name <- df_job$cause_name  # <<< NEW: single cause for this task
   
-  # Load data (can switch to open_dataset() if needed)
   df <- read_parquet(fp_input) %>% as.data.table()
+  age_group_years_start <- df$age_group_years_start[1]
   age_group_years_start <- df$age_group_years_start[1]
 }
 
@@ -97,7 +129,6 @@ ensure_dir_exists <- function(dir_path) {
 ## 1. Create directory folders 
 ##----------------------------------------------------------------
 
-## ---- 0. Dir + filename helpers --------------------------------------------
 
 # 0.0 tiny sanitizer for folder names
 slugify <- function(x) {
@@ -123,15 +154,13 @@ base_output_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis"
 date_folder     <- format(Sys.time(), "%Y%m%d")
 output_folder   <- file.path(base_output_dir, "04.Two_Part_Estimates", date_folder)
 
-# 0.4 fixed parents (by-cause parent, bin_summary, logs)
-by_cause_parent_folder    <- file.path(output_folder, "by_cause")
-#bin_summary_output_folder <- file.path(output_folder, "bin_summary")
-log_folder                <- file.path(base_output_dir, "logs")
+# 0.4 fixed parents (by-cause parent, logs)
+by_cause_parent_folder <- file.path(output_folder, "by_cause")
+log_folder             <- file.path(base_output_dir, "logs")
 
 # create parents
 ensure_dir_exists(output_folder)
 ensure_dir_exists(by_cause_parent_folder)
-ensure_dir_exists(bin_summary_output_folder)
 ensure_dir_exists(log_folder)
 
 # 0.5 per-cause directory builder; returns a list of paths you can use
@@ -151,14 +180,6 @@ make_cause_dirs <- function(cause_name) {
   )
 }
 
-# 0.6 create per-cause folders and assign bootstrap_chunks_output_folder
-cause_name <- "_mental"  # replace dynamically in your loop if needed
-cause_paths <- make_cause_dirs(cause_name)
-bootstrap_chunks_output_folder <- cause_paths$boot_dir      # <-- use this when writing boot chunks
-results_output_folder          <- cause_paths$results_dir   # <-- use this when writing per-cause final CSVs
-
-
-
 
 ##----------------------------------------------------------------
 ## 2. Convert key variables to factors for modeling purposes
@@ -177,248 +198,319 @@ df[, `:=`(
 ## 3. Filer to one casue 
 ##----------------------------------------------------------------
 
+#' Run Two-Part Model Bootstrap for a Single Cause
+#'
+#' @description
+#' Fits a two-part cost model for a specific `acause_lvl2` category using
+#' bootstrap resampling. Writes intermediate bootstrap iteration results
+#' to parquet files and produces a final per-cause summary CSV with means
+#' and 95% CIs for each HIV/SUD cost combination and deltas.
+#'
+#' @details
+#' This function:
+#' 1. Creates output folders under `/by_cause/<cause>/boot_chunks` and `/results`.
+#' 2. Filters the input dataset to the given cause.
+#' 3. Generates standardization bins by race, sex, and age group.
+#' 4. Runs `B` bootstrap iterations:
+#'    - Resample rows with replacement.
+#'    - Fit a logistic model for any cost occurrence.
+#'    - Fit a gamma model (log link) for positive costs, truncated at 99.5th percentile.
+#'    - Predict expected costs for all HIV/SUD combinations.
+#'    - Standardize costs using bin proportions.
+#'    - Save each iteration's results as a parquet file.
+#' 5. Combines bootstrap outputs, computes means, quantile-based CIs, and deltas.
+#' 6. Writes the final summary CSV in the cause's `results` folder.
+#'
+#' @param df_all Full dataset (data.frame/data.table) containing at least:
+#'        `acause_lvl2`, `race_cd`, `sex_id`, `has_hiv`, `has_sud`,
+#'        `has_cost`, `tot_pay_amt`, and `age_group_years_start`.
+#' @param cause_name Character, the specific `acause_lvl2` value to model.
+#' @param B Integer, number of bootstrap iterations.
+#' @param file_type String, file type label used in output filenames (e.g., "F2T" or "RX").
+#' @param year_id Integer, year of data.
+#' @param age_group_years_start Integer, starting age of the group in years.
+#'
+#' @return Invisibly returns the path to the final summary CSV. Writes results to disk.
+#'
+#' @note
+#' If `has_hiv` or `has_sud` have no variation in a bootstrap iteration, that iteration
+#' is skipped. If all iterations are skipped for a cause, no summary is written.
+#'
+#' @examples
+#' run_one_cause(df, "_mental", 100, "F2T", 2010, 65)
+#' 
 
-#unique(df$acause_lvl2)
+
+# B selection
+B <- if (file_type == "F2T") bootstrap_iterations_F2T else bootstrap_iterations_RX
+
+# Run the single cause for this array task
+run_one_cause(
+  df_all = df,
+  cause_name = cause_name,
+  B = B,
+  file_type = file_type,
+  year_id = year_id,
+  age_group_years_start = age_group_years_start
+)
+# make seeds vary across array tasks
+seed_base <- as.integer(Sys.getenv("SLURM_ARRAY_TASK_ID", unset = 1234))
+set.seed(seed_base)
 
 
-cause_name <- "_mental"
-
-df_cause <- df %>%
-  filter(acause_lvl2 == cause_name)
-
-
-
-##----------------------------------------------------------------
-## 
-##----------------------------------------------------------------
-
-# Example cause name
-cause_name <- "_mental"
-
-# Filter for cause-specific dataset
-df_cause <- as.data.table(df)[acause_lvl2 == cause_name]
-
-#----------------------------------------------------------------
-# Bins for standardization (no acause_lvl2 here because it's fixed)
-#----------------------------------------------------------------
-df_bins_master <- df_cause %>%
-  group_by(race_cd, sex_id, age_group_years_start) %>%
-  summarise(row_count = n(), .groups = "drop") %>%
-  group_by(race_cd, age_group_years_start) %>%
-  mutate(prop_bin = row_count / sum(row_count, na.rm = TRUE)) %>%
-  ungroup()
-
-#----------------------------------------------------------------
-# Bootstrap
-#----------------------------------------------------------------
-
-
-
-if (file_type == "F2T") {
-  B <- bootstrap_iterations_F2T
-} else if (file_type == "RX") {
-  B <- bootstrap_iterations_RX
-} else {
-  B <- 1
-}
-set.seed(123)
-
-for (b in seq_len(B)) {
-  cat("Bootstrap iteration:", b, "/", B, "\n")
+# run_one_cause <- function(df_all, cause_name, B,
+#                           file_type, year_id, age_group_years_start) {
+#   cat("\n=== Running cause:", cause_name, "===\n")
   
-  # Resample with replacement
-  df_boot <- df_cause[sample(.N, replace = TRUE)]
+  # Per-cause folders
+  cause_paths <- make_cause_dirs(cause_name)
+  bootstrap_chunks_output_folder <- cause_paths$boot_dir
+  results_output_folder          <- cause_paths$results_dir
   
-  # Keep factor levels stable
-  df_boot[, `:=`(
-    race_cd = factor(race_cd, levels = levels(df$race_cd)),
-    sex_id  = factor(sex_id,  levels = levels(df$sex_id)),
-    has_hiv = factor(has_hiv, levels = levels(df$has_hiv)),
-    has_sud = factor(has_sud, levels = levels(df$has_sud))
-  )]
+  # Optional: clean old boot chunks for a fresh run
+  old_files <- list.files(bootstrap_chunks_output_folder, full.names = TRUE)
+  if (length(old_files) > 0L) file.remove(old_files)
   
-  # Check diversity
-  if (nlevels(droplevels(df_boot$has_hiv)) < 2 ||
-      nlevels(droplevels(df_boot$has_sud)) < 2) {
-    cat("Skipping iteration", b, "- insufficient factor diversity\n")
-    next
+  # Filter for cause-specific dataset
+  df_cause <- as.data.table(df_all)[acause_lvl2 == cause_name]
+  if (nrow(df_cause) == 0L) {
+    cat("[", cause_name, "] No rows; skipping.\n", sep = "")
+    return(invisible(NULL))
   }
   
-  # Part 1: Logistic
-  mod_logit <- glm(
-    has_cost ~ has_hiv + has_sud + race_cd + sex_id,
-    data   = df_boot,
-    family = binomial(link = "logit")
+  # Bins for standardization
+  df_bins_master <- df_cause %>%
+    group_by(race_cd, sex_id, age_group_years_start) %>%
+    summarise(row_count = n(), .groups = "drop") %>%
+    group_by(race_cd, age_group_years_start) %>%
+    mutate(prop_bin = row_count / sum(row_count, na.rm = TRUE)) %>%
+    ungroup()
+  
+  # Bootstrap count from file_type (falls back to 1)
+  if (file_type == "F2T") {
+    B_local <- B
+  } else if (file_type == "RX") {
+    B_local <- B
+  } else {
+    B_local <- 1
+  }
+  set.seed(123)
+  
+  # --- BOOTSTRAP ---
+  kept_iters <- 0L
+  for (b in seq_len(B_local)) {
+    cat("[", cause_name, "] Bootstrap iteration:", b, "/", B_local, "\n", sep = "")
+    
+    # Resample
+    df_boot <- df_cause[sample(.N, replace = TRUE)]
+    
+    # Keep factor levels stable
+    df_boot[, `:=`(
+      race_cd = factor(race_cd, levels = levels(df_all$race_cd)),
+      sex_id  = factor(sex_id,  levels = levels(df_all$sex_id)),
+      has_hiv = factor(has_hiv, levels = levels(df_all$has_hiv)),
+      has_sud = factor(has_sud, levels = levels(df_all$has_sud))
+    )]
+    
+    # Diversity check
+    if (nlevels(droplevels(df_boot$has_hiv)) < 2 ||
+        nlevels(droplevels(df_boot$has_sud)) < 2) {
+      cat("[", cause_name, "] Skipping iteration ", b, " - insufficient HIV/SUD variation\n", sep = "")
+      next
+    }
+    
+    # Two-part models
+    mod_logit <- glm(
+      has_cost ~ has_hiv + has_sud + race_cd + sex_id,
+      data   = df_boot,
+      family = binomial(link = "logit")
+    )
+    
+    df_gamma_input <- df_boot[tot_pay_amt > 0]
+    if (nrow(df_gamma_input) < 10) { # safety
+      cat("[", cause_name, "] Skipping iteration ", b, " - too few positive costs\n", sep = "")
+      next
+    }
+    df_gamma_input[, tot_pay_amt := pmin(
+      tot_pay_amt, quantile(tot_pay_amt, 0.995, na.rm = TRUE)
+    )]
+    
+    mod_gamma <- glm(
+      tot_pay_amt ~ has_hiv + has_sud + race_cd + sex_id,
+      data    = df_gamma_input,
+      family  = Gamma(link = "log"),
+      control = glm.control(maxit = 100)
+    )
+    
+    # Prediction grid
+    grid_input_master <- as.data.table(df_bins_master)[
+      , .(race_cd, sex_id, age_group_years_start, prop_bin)
+    ]
+    combo_A <- CJ(
+      has_hiv = levels(df_boot$has_hiv),
+      has_sud = levels(df_boot$has_sud)
+    )
+    grid_input_master[, dummy := 1L]
+    combo_A[, dummy := 1L]
+    grid_input_master <- merge(
+      grid_input_master, combo_A, by = "dummy", allow.cartesian = TRUE
+    )[, dummy := NULL]
+    
+    # Predict expected cost
+    grid_input_master[, prob_has_cost := predict(mod_logit, newdata = .SD, type = "response")]
+    grid_input_master[, cost_if_pos   := predict(mod_gamma, newdata = .SD, type = "response")]
+    grid_input_master[, exp_cost      := prob_has_cost * cost_if_pos]
+    
+    # Standardize + collapse
+    out_b <- copy(grid_input_master)
+    out_b[, exp_cost_bin := exp_cost * prop_bin]
+    out_b[, acause_lvl2 := cause_name]
+    out_b <- out_b[
+      , .(exp_cost = sum(exp_cost_bin)),
+      by = .(acause_lvl2, race_cd, age_group_years_start, has_hiv, has_sud)
+    ]
+    
+    # Wide-format & deltas
+    out_b <- dcast(
+      out_b,
+      acause_lvl2 + race_cd + age_group_years_start ~ has_hiv + has_sud,
+      value.var = "exp_cost"
+    )
+    
+    # Ensure all cells exist (fill with NA if missing in rare cases)
+    for (nm in c("0_0","1_0","0_1","1_1")) if (!nm %in% names(out_b)) out_b[[nm]] <- NA_real_
+    setnames(out_b, c("0_0","1_0","0_1","1_1"),
+             c("cost_neither","cost_hiv_only","cost_sud_only","cost_hiv_sud"))
+    
+    out_b[, `:=`(
+      delta_hiv_only = cost_hiv_only - cost_neither,
+      delta_sud_only = cost_sud_only - cost_neither,
+      delta_hiv_sud  = cost_hiv_sud  - cost_neither,
+      bootstrap_iter = b
+    )]
+    
+    # Write this bootstrap chunk
+    boot_out_path <- file.path(
+      bootstrap_chunks_output_folder,
+      sprintf("bootstrap_iter_%03d.parquet", b)
+    )
+    write_parquet(out_b, boot_out_path)
+    kept_iters <- kept_iters + 1L
+  }
+  
+  if (kept_iters == 0L) {
+    cat("[", cause_name, "] No valid bootstrap iterations kept. Skipping summary.\n")
+    return(invisible(NULL))
+  }
+  
+  # --- SUMMARY ---
+  boot_combined <- open_dataset(bootstrap_chunks_output_folder) %>% collect()
+  
+  df_summary <- boot_combined %>%
+    group_by(acause_lvl2, race_cd, age_group_years_start) %>%
+    summarise(
+      mean_cost_neither  = mean(cost_neither, na.rm = TRUE),
+      mean_cost_hiv_only = mean(cost_hiv_only, na.rm = TRUE),
+      mean_cost_sud_only = mean(cost_sud_only, na.rm = TRUE),
+      mean_cost_hiv_sud  = mean(cost_hiv_sud,  na.rm = TRUE),
+      lower_ci_neither   = quantile(cost_neither, 0.025, na.rm = TRUE),
+      upper_ci_neither   = quantile(cost_neither, 0.975, na.rm = TRUE),
+      lower_ci_hiv_only  = quantile(cost_hiv_only, 0.025, na.rm = TRUE),
+      upper_ci_hiv_only  = quantile(cost_hiv_only, 0.975, na.rm = TRUE),
+      lower_ci_sud_only  = quantile(cost_sud_only, 0.025, na.rm = TRUE),
+      upper_ci_sud_only  = quantile(cost_sud_only, 0.975, na.rm = TRUE),
+      lower_ci_hiv_sud   = quantile(cost_hiv_sud,  0.025, na.rm = TRUE),
+      upper_ci_hiv_sud   = quantile(cost_hiv_sud,  0.975, na.rm = TRUE),
+      mean_delta_hiv_only = mean(delta_hiv_only, na.rm = TRUE),
+      mean_delta_sud_only = mean(delta_sud_only, na.rm = TRUE),
+      mean_delta_hiv_sud  = mean(delta_hiv_sud,  na.rm = TRUE),
+      lower_ci_delta_hiv_only = quantile(delta_hiv_only, 0.025, na.rm = TRUE),
+      upper_ci_delta_hiv_only = quantile(delta_hiv_only, 0.975, na.rm = TRUE),
+      lower_ci_delta_sud_only = quantile(delta_sud_only, 0.025, na.rm = TRUE),
+      upper_ci_delta_sud_only = quantile(delta_sud_only, 0.975, na.rm = TRUE),
+      lower_ci_delta_hiv_sud  = quantile(delta_hiv_sud,  0.025, na.rm = TRUE),
+      upper_ci_delta_hiv_sud  = quantile(delta_hiv_sud,  0.975, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    mutate(year_id = year_id, file_type = file_type)
+  
+  # Final column order + rename
+  df_summary <- df_summary %>%
+    rename(
+      mean_cost           = mean_cost_neither,
+      lower_ci            = lower_ci_neither,
+      upper_ci            = upper_ci_neither,
+      mean_cost_hiv       = mean_cost_hiv_only,
+      lower_ci_hiv        = lower_ci_hiv_only,
+      upper_ci_hiv        = upper_ci_hiv_only,
+      mean_cost_sud       = mean_cost_sud_only,
+      lower_ci_sud        = lower_ci_sud_only,
+      upper_ci_sud        = upper_ci_sud_only
+    )
+  
+  desired_order <- c(
+    "acause_lvl2", "race_cd",
+    "mean_cost", "lower_ci", "upper_ci",
+    "mean_cost_hiv", "lower_ci_hiv", "upper_ci_hiv",
+    "mean_cost_sud", "lower_ci_sud", "upper_ci_sud",
+    "mean_cost_hiv_sud", "lower_ci_hiv_sud", "upper_ci_hiv_sud",
+    "mean_delta_hiv_only", "lower_ci_delta_hiv_only", "upper_ci_delta_hiv_only",
+    "mean_delta_sud_only", "lower_ci_delta_sud_only", "upper_ci_delta_sud_only",
+    "mean_delta_hiv_sud",  "lower_ci_delta_hiv_sud",  "upper_ci_delta_hiv_sud",
+    "age_group_years_start", "year_id", "file_type"
   )
+  df_summary <- df_summary[, desired_order]
   
-  # Part 2: Gamma
-  df_gamma_input <- df_boot[tot_pay_amt > 0]
-  df_gamma_input[, tot_pay_amt := pmin(
-    tot_pay_amt, quantile(tot_pay_amt, 0.995, na.rm = TRUE)
-  )]
+  # Write per-cause final CSV
+  final_csv  <- generate_filename("bootstrap_marginal_results", ".csv", cause = cause_name)
+  final_path <- file.path(results_output_folder, final_csv)
+  write.csv(df_summary, final_path, row.names = FALSE)
+  cat("[", cause_name, "] Wrote final cause summary to:", final_path, "\n", sep = "")
   
-  mod_gamma <- glm(
-    tot_pay_amt ~ has_hiv + has_sud + race_cd + sex_id,
-    data    = df_gamma_input,
-    family  = Gamma(link = "log"),
-    control = glm.control(maxit = 100)
-  )
-  
-  # Prediction grid
-  grid_input_master <- as.data.table(df_bins_master)[
-    , .(race_cd, sex_id, age_group_years_start, prop_bin)
-  ]
-  
-  combo_A <- CJ(
-    has_hiv = levels(df_boot$has_hiv),
-    has_sud = levels(df_boot$has_sud)
-  )
-  
-  grid_input_master[, dummy := 1L]
-  combo_A[, dummy := 1L]
-  
-  grid_input_master <- merge(
-    grid_input_master, combo_A,
-    by = "dummy", allow.cartesian = TRUE
-  )[, dummy := NULL]
-  
-  # Predict expected costs
-  grid_input_master[, prob_has_cost := predict(mod_logit, newdata = .SD, type = "response")]
-  grid_input_master[, cost_if_pos   := predict(mod_gamma, newdata = .SD, type = "response")]
-  grid_input_master[, exp_cost      := prob_has_cost * cost_if_pos]
-  
-  # Standardize
-  out_b <- copy(grid_input_master)
-  out_b[, exp_cost_bin := exp_cost * prop_bin]
-  out_b[, acause_lvl2 := cause_name]
-  
-  # Collapse over sex
-  out_b <- out_b[
-    , .(exp_cost = sum(exp_cost_bin)),
-    by = .(acause_lvl2, race_cd, age_group_years_start, has_hiv, has_sud)
-  ]
-  
-  # Wide format
-  out_b <- dcast(
-    out_b,
-    acause_lvl2 + race_cd + age_group_years_start ~ has_hiv + has_sud,
-    value.var = "exp_cost"
-  )
-  
-  setnames(out_b, c("0_0", "1_0", "0_1", "1_1"),
-           c("cost_neither", "cost_hiv_only", "cost_sud_only", "cost_hiv_sud"))
-  
-  out_b[, `:=`(
-    delta_hiv_only = cost_hiv_only - cost_neither,
-    delta_sud_only = cost_sud_only - cost_neither,
-    delta_hiv_sud  = cost_hiv_sud  - cost_neither,
-    bootstrap_iter = b
-  )]
-  
-  boot_out_path <- file.path(bootstrap_chunks_output_folder,
-                             sprintf("bootstrap_iter_%03d.parquet", b))
-  write_parquet(out_b, boot_out_path)
-  cat("Written:", boot_out_path, "\n")
-  
-  rm(df_boot, df_gamma_input, mod_logit, mod_gamma, out_b, grid_input_master)
-  gc(verbose = FALSE)
+  invisible(final_path)
 }
 
-#----------------------------------------------------------------
-# Bootstrap summary
-#----------------------------------------------------------------
 
 
-# Combine bootstrap results for this cause
-boot_combined <- open_dataset(bootstrap_chunks_output_folder) %>% collect()
+# Driver 
 
-# Per-cause bin summary
-df_bins_summary <- df_bins_master %>%
-  mutate(acause_lvl2 = cause_name) %>%
-  group_by(acause_lvl2, race_cd, age_group_years_start) %>%
-  summarise(total_row_count = sum(row_count, na.rm = TRUE), .groups = "drop")
+##----------------------------------------------------------------
+## 3. Run for all causes
+##----------------------------------------------------------------
 
-# Per-cause bootstrap summary with CIs
-df_summary <- boot_combined %>%
-  group_by(acause_lvl2, race_cd, age_group_years_start) %>%
-  summarise(
-    mean_cost_neither  = mean(cost_neither, na.rm = TRUE),
-    mean_cost_hiv_only = mean(cost_hiv_only, na.rm = TRUE),
-    mean_cost_sud_only = mean(cost_sud_only, na.rm = TRUE),
-    mean_cost_hiv_sud  = mean(cost_hiv_sud,  na.rm = TRUE),
-    lower_ci_neither   = quantile(cost_neither, 0.025, na.rm = TRUE),
-    upper_ci_neither   = quantile(cost_neither, 0.975, na.rm = TRUE),
-    lower_ci_hiv_only  = quantile(cost_hiv_only, 0.025, na.rm = TRUE),
-    upper_ci_hiv_only  = quantile(cost_hiv_only, 0.975, na.rm = TRUE),
-    lower_ci_sud_only  = quantile(cost_sud_only, 0.025, na.rm = TRUE),
-    upper_ci_sud_only  = quantile(cost_sud_only, 0.975, na.rm = TRUE),
-    lower_ci_hiv_sud   = quantile(cost_hiv_sud,  0.025, na.rm = TRUE),
-    upper_ci_hiv_sud   = quantile(cost_hiv_sud,  0.975, na.rm = TRUE),
-    mean_delta_hiv_only = mean(delta_hiv_only, na.rm = TRUE),
-    mean_delta_sud_only = mean(delta_sud_only, na.rm = TRUE),
-    mean_delta_hiv_sud  = mean(delta_hiv_sud,  na.rm = TRUE),
-    lower_ci_delta_hiv_only = quantile(delta_hiv_only, 0.025, na.rm = TRUE),
-    upper_ci_delta_hiv_only = quantile(delta_hiv_only, 0.975, na.rm = TRUE),
-    lower_ci_delta_sud_only = quantile(delta_sud_only, 0.025, na.rm = TRUE),
-    upper_ci_delta_sud_only = quantile(delta_sud_only, 0.975, na.rm = TRUE),
-    lower_ci_delta_hiv_sud  = quantile(delta_hiv_sud,  0.025, na.rm = TRUE),
-    upper_ci_delta_hiv_sud  = quantile(delta_hiv_sud,  0.975, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  left_join(df_bins_summary, by = c("acause_lvl2", "race_cd", "age_group_years_start")) %>%
-  mutate(year_id = year_id, file_type = file_type)
+# Convert to factors (you already did this above, keeping here in case of re-ordering)
+df[, `:=`(
+  acause_lvl2 = factor(acause_lvl2),
+  race_cd     = factor(race_cd),
+  sex_id      = factor(sex_id),
+  has_hiv     = factor(has_hiv, levels = c(0, 1)),
+  has_sud     = factor(has_sud, levels = c(0, 1)),
+  has_hepc    = factor(has_hepc, levels = c(0, 1)),
+  has_cost    = factor(has_cost, levels = c(0, 1))
+)]
 
-# Rename columns (same as before)
-df_summary <- df_summary %>%
-  rename(
-    mean_cost           = mean_cost_neither,
-    lower_ci            = lower_ci_neither,
-    upper_ci            = upper_ci_neither,
-    mean_cost_hiv       = mean_cost_hiv_only,
-    lower_ci_hiv        = lower_ci_hiv_only,
-    upper_ci_hiv        = upper_ci_hiv_only,
-    mean_cost_sud       = mean_cost_sud_only,
-    lower_ci_sud        = lower_ci_sud_only,
-    upper_ci_sud        = upper_ci_sud_only,
-    mean_cost_hiv_sud   = mean_cost_hiv_sud,
-    lower_ci_hiv_sud    = lower_ci_hiv_sud,
-    upper_ci_hiv_sud    = upper_ci_hiv_sud,
-    mean_delta_hiv      = mean_delta_hiv_only,
-    lower_ci_delta_hiv  = lower_ci_delta_hiv_only,
-    upper_ci_delta_hiv  = upper_ci_delta_hiv_only,
-    mean_delta_sud      = mean_delta_sud_only,
-    lower_ci_delta_sud  = lower_ci_delta_sud_only,
-    upper_ci_delta_sud  = upper_ci_delta_sud_only,
-    mean_delta_hiv_sud  = mean_delta_hiv_sud,
-    lower_ci_delta_hiv_sud = lower_ci_delta_hiv_sud,
-    upper_ci_delta_hiv_sud = upper_ci_delta_hiv_sud
+# Choose causes to run
+all_causes <- levels(df$acause_lvl2)
+# Exclude HIV and SUD acause if you prefer (optional)
+causes_to_run <- setdiff(all_causes, c("hiv", "_subs"))
+
+cat("Will run", length(causes_to_run), "causes:\n")
+print(causes_to_run)
+
+# B from your earlier logic
+B <- if (file_type == "F2T") bootstrap_iterations_F2T else bootstrap_iterations_RX
+
+# Run sequentially (simple). For parallel / SLURM array, run run_one_cause per task.
+outputs <- lapply(
+  causes_to_run,
+  function(cn) run_one_cause(
+    df_all = df,
+    cause_name = cn,
+    B = B,
+    file_type = file_type,
+    year_id = year_id,
+    age_group_years_start = age_group_years_start
   )
-
-# Arrange columns in desired order
-desired_order <- c(
-  "acause_lvl2", "race_cd",
-  "mean_cost", "lower_ci", "upper_ci",
-  "mean_cost_hiv", "lower_ci_hiv", "upper_ci_hiv",
-  "mean_cost_sud", "lower_ci_sud", "upper_ci_sud",
-  "mean_cost_hiv_sud", "lower_ci_hiv_sud", "upper_ci_hiv_sud",
-  "mean_delta_hiv", "lower_ci_delta_hiv", "upper_ci_delta_hiv",
-  "mean_delta_sud", "lower_ci_delta_sud", "upper_ci_delta_sud",
-  "mean_delta_hiv_sud", "lower_ci_delta_hiv_sud", "upper_ci_delta_hiv_sud",
-  "total_row_count", "age_group_years_start", "year_id", "file_type"
 )
-df_summary <- df_summary[, desired_order]
 
-# --- WRITE OUTPUTS ---
-final_csv <- generate_filename("bootstrap_marginal_results", ".csv", cause = cause_name)
-final_path <- file.path(cause_paths$results_dir, final_csv)
-write.csv(df_summary, final_path, row.names = FALSE)
-cat("Wrote final cause summary to:", final_path, "\n")
-
-# # Bin summary
-# bin_csv <- generate_filename("bin_summary", ".csv", cause = cause_name)
-# bin_path <- file.path(cause_paths$results_dir, bin_csv)
-# write.csv(df_bins_summary, bin_path, row.names = FALSE)
-# cat("Wrote bin summary to:", bin_path, "\n")
-# 
-
-
+cat("\nDone. Per-cause results are in:\n", file.path(output_folder, "by_cause"), "\n")
