@@ -66,8 +66,8 @@ log_dir <- file.path(l, "LU_CMS/DEX/hivsud/aim1/B_analysis/logs")
 dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
 
 # Set number of bootstrap iterations
-bootstrap_iterations_F2T <- 25
-bootstrap_iterations_RX <- 8
+bootstrap_iterations_F2T <- 8
+bootstrap_iterations_RX <- 4
 ### Aug 4 run in 100 boot interations
 ### 48 hours 
 
@@ -81,11 +81,11 @@ jid <- SUBMIT_ARRAY_JOB(
   args = c(fp_parameters, bootstrap_iterations_F2T, bootstrap_iterations_RX),
   error_dir = log_dir,
   output_dir = log_dir,
-  queue = "long.q",
+  queue = "all.q",
   n_jobs = nrow(df_params),
   memory = "150G", # 200 needed for F2T @ 50 Bootstrap iterations 
   threads = 1,
-  time = "24:00:00", # 24:00:00 is needed for F2T @ 50 Bootstrap iterations
+  time = "12:00:00", # 24:00:00 is needed for F2T @ 50 Bootstrap iterations
   ## long.q is 384H (2 weeks) if its under 72 then do all.q #https://docs.cluster.ihme.washington.edu/#hpc-execution-host-hardware-specifications
   user_email = paste0(user, "@uw.edu"),
   archive = FALSE,

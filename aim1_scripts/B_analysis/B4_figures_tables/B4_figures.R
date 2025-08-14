@@ -83,8 +83,8 @@ df_sub_cause_year <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtab
 df_sub_race       <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_race.csv"))
 # Summarizes cost and delta by race (and by cause lvl1/lvl2), pooling over years, age, type of care, etc.
 
-df_sub_toc        <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_toc.csv"))
-# Summarizes by type of care (e.g., inpatient, outpatient, Rx), and disease.
+# df_sub_toc        <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_toc.csv"))
+# # Summarizes by type of care (e.g., inpatient, outpatient, Rx), and disease.
 
 df_sub_year       <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_year.csv"))
 # Aggregated by year and disease cause, pooling across age, race, and type of care.
@@ -148,7 +148,7 @@ df_long <- df_sub_cause %>%
   )
 
 
-df_long$scenario <- factor(df_long$scenario, levels = c("hiv", "sud"), labels = c("HIV", "Mental Health and Substance Use"))
+df_long$scenario <- factor(df_long$scenario, levels = c("hiv", "sud"), labels = c("HIV", "Substance Use"))
 
 
 ### plot 
@@ -166,8 +166,8 @@ delta_plot <- ggplot(df_long, aes(x = mean, y = reorder(cause_name_lvl2, mean), 
     labels = scales::dollar_format()
   ) +
   labs(
-    title = "Mean Delta per Disease Category (HIV and MSUD Only)",
-    x = "All years, care types and races (Change in Cost compared to No HIV & no MSUD, 2019 USD)",
+    title = "Mean Delta per Disease Category (HIV and SUD Only)",
+    x = "All years, care types and races (Change in Cost compared to No HIV & no SUD, 2019 USD)",
     y = "Disease Category",
     fill = "Scenario"
   ) +
@@ -207,11 +207,11 @@ df_long_race <- df_sub_race %>%
 
 df_long_race$scenario <- factor(df_long_race$scenario, 
                                 levels = c("hiv", "sud"), 
-                                labels = c("HIV", "MSUD"))
+                                labels = c("HIV", "SUD"))
 labs(
   title = "Mean Delta by Disease and Comorbidity (by Race)",
-  subtitle = "All years, all ages, all types of care",
-  x = "Mean Delta (Change in Cost compared to No HIV & MSUD, 2019 USD)",
+  subtitle = "All years, all ages",
+  x = "Mean Delta (Change in Cost compared to No HIV & SUD, 2019 USD)",
   y = "Level 2 Disease Category",
   fill = "Race"
 )
@@ -239,7 +239,7 @@ delta_plot_race2 <- ggplot(
   ) +
   labs(
     title = "Mean Delta by Disease and Comorbidity (by Race)",
-    x = "Mean Delta (Change in Cost compared to No HIV & MSUD, 2019 USD)",
+    x = "Mean Delta (Change in Cost compared to No HIV & SUD, 2019 USD)",
     y = "Level 2 Disease Category",
     fill = "Race"
   ) +
@@ -258,11 +258,13 @@ save_plot(delta_plot_race2, "mean_delta_by_comorb_race")
 
 
 ####################################
-# Delta HIV over time all toc
+# Delta HIV over time all race
 ####################################
 
+colnames(df_master)
+
 df_ribbon <- df_master %>%
-  group_by(year_id, toc) %>%
+  group_by(year_id, race_cd) %>%
   summarise(
     mean_delta = weighted.mean(mean_delta_hiv, total_row_count, na.rm = TRUE),
     lower_ci = weighted.mean(lower_ci_delta_hiv, total_row_count, na.rm = TRUE),
@@ -270,9 +272,9 @@ df_ribbon <- df_master %>%
     .groups = "drop"
   )
 
-plot_model_delta_cost_by_year_toc <- ggplot(
+plot_model_delta_cost_by_year_race_cd <- ggplot(
   df_ribbon,
-  aes(x = as.integer(year_id), y = mean_delta, color = toc, group = toc, fill = toc)
+  aes(x = as.integer(year_id), y = mean_delta, color = race_cd, group = race_cd, fill = race_cd)
 ) +
   geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci), alpha = 0.22, color = NA) +
   geom_line(size = 1.2) +
@@ -282,54 +284,59 @@ plot_model_delta_cost_by_year_toc <- ggplot(
   scale_x_continuous(breaks = unique(df_ribbon$year_id)) +
   scale_y_continuous(labels = scales::dollar_format()) +
   labs(
-    title = "Cost Delta by Type of Care Over Time (All Races, All Ages)",
+    title = "Cost Delta by Race Over Time (All Races, All Ages)",
     subtitle = "Weighted difference in cost (HIV+ vs HIV−); 95% CI; 2019 USD",
     x = "Year", y = "Mean Cost Delta (USD)",
-    color = "Type of Care", fill = "Type of Care"
+    color = "Race", fill = "Race"
   ) +
   theme_minimal(base_size = 14) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-save_plot(plot_model_delta_cost_by_year_toc, "model_delta_cost_by_year_toc_all_races")
+save_plot(plot_model_delta_cost_by_year_race_cd, "model_delta_cost_by_year_race_cd_all_races")
 
 ####################################
-# HIV delta_cost_by_year_toc_facet_race
+# HIV delta_cost_by_year_race_cd_facet_race
 ####################################
 
-plot7_modeled_delta_by_toc_and_race_facet <- df_master %>%
-  group_by(year_id, toc, race_cd) %>%
+plot7_modeled_delta_by_age_group_years_start_and_race_facet <- df_master %>%
+  group_by(year_id, age_group_years_start, race_cd) %>%
   summarise(
     mean_delta = weighted.mean(mean_delta_hiv, total_row_count, na.rm = TRUE),
     lower_ci = weighted.mean(lower_ci_delta_hiv, total_row_count, na.rm = TRUE),
     upper_ci = weighted.mean(upper_ci_delta_hiv, total_row_count, na.rm = TRUE),
     .groups = "drop"
   ) %>%
-  ggplot(aes(x = factor(year_id), y = mean_delta, color = toc, group = toc, fill = toc)) +
+  mutate(age_group_years_start = factor(age_group_years_start)) %>%  # convert to discrete
+  ggplot(aes(x = factor(year_id), 
+             y = mean_delta, 
+             color = age_group_years_start, 
+             group = age_group_years_start, 
+             fill = age_group_years_start)) +
   geom_line(size = 1) +
   geom_point(size = 2) +
-  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci), alpha = 0.2, color = NA) +
+  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci, group = age_group_years_start, fill = age_group_years_start), alpha = 0.2, color = NA) +
   scale_color_jama() +
   scale_fill_jama() +
   scale_y_continuous(labels = scales::dollar_format()) +
   facet_wrap(~ race_cd) +
   labs(
-    title = "Cost Delta by Type of Care and Race Over Time",
+    title = "Cost Delta by Age Group and Race Over Time",
     subtitle = "Weighted difference in cost (HIV+ vs HIV−); 95% CI; 2019 USD",
     x = "Year", y = "Mean Cost Delta (USD)",
-    color = "Type of Care", fill = "Type of Care"
+    color = "Age", fill = "Age"
   ) +
   theme_minimal(base_size = 13) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-save_plot(plot7_modeled_delta_by_toc_and_race_facet, "model_delta_cost_by_year_toc_facet_race")
-
+save_plot(plot7_modeled_delta_by_age_group_years_start_and_race_facet, 
+          "model_delta_cost_by_year_age_group_years_start_facet_race")
 
 ####################################
-# Delta MSUD over time all toc
+# Delta MSUD over time all race_cd
 ####################################
 
 df_ribbon_msud <- df_master %>%
-  group_by(year_id, toc) %>%
+  group_by(year_id, race_cd) %>%
   summarise(
     mean_delta = weighted.mean(mean_delta_sud, total_row_count, na.rm = TRUE),
     lower_ci = weighted.mean(lower_ci_delta_sud, total_row_count, na.rm = TRUE),
@@ -337,9 +344,9 @@ df_ribbon_msud <- df_master %>%
     .groups = "drop"
   )
 
-plot_model_delta_cost_by_year_toc_msud <- ggplot(
+plot_model_delta_cost_by_year_race_cd_msud <- ggplot(
   df_ribbon_msud,
-  aes(x = as.integer(year_id), y = mean_delta, color = toc, group = toc, fill = toc)
+  aes(x = as.integer(year_id), y = mean_delta, color = race_cd, group = race_cd, fill = race_cd)
 ) +
   geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci), alpha = 0.22, color = NA) +
   geom_line(size = 1.2) +
@@ -349,15 +356,15 @@ plot_model_delta_cost_by_year_toc_msud <- ggplot(
   scale_x_continuous(breaks = unique(df_ribbon_msud$year_id)) +
   scale_y_continuous(labels = scales::dollar_format()) +
   labs(
-    title = "Cost Delta by Type of Care Over Time (All Races, All Ages)",
-    subtitle = "Weighted difference in cost (MSUD+ vs MSUD−); 95% CI; 2019 USD",
+    title = "Cost Delta Over Time by Races (All Races, All Ages)",
+    subtitle = "Weighted difference in cost (SUD+ vs SUD−); 95% CI; 2019 USD",
     x = "Year", y = "Mean Cost Delta (USD)",
-    color = "Type of Care", fill = "Type of Care"
+    color = "Race", fill = "Race"
   ) +
   theme_minimal(base_size = 14) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-save_plot(plot_model_delta_cost_by_year_toc_msud, "model_delta_cost_by_year_toc_all_races_msud")
+save_plot(plot_model_delta_cost_by_year_race_cd_msud, "model_delta_cost_by_year_race_cd_all_races_msud")
 
 
 
@@ -366,32 +373,42 @@ save_plot(plot_model_delta_cost_by_year_toc_msud, "model_delta_cost_by_year_toc_
 
 #####
 
-plot7_modeled_delta_by_toc_and_race_facet_msud <- df_master %>%
-  group_by(year_id, toc, race_cd) %>%
+plot7_modeled_delta_by_age_group_years_start_and_race_facet_msud <- df_master %>%
+  group_by(year_id, age_group_years_start, race_cd) %>%
   summarise(
     mean_delta = weighted.mean(mean_delta_sud, total_row_count, na.rm = TRUE),
     lower_ci = weighted.mean(lower_ci_delta_sud, total_row_count, na.rm = TRUE),
     upper_ci = weighted.mean(upper_ci_delta_sud, total_row_count, na.rm = TRUE),
     .groups = "drop"
   ) %>%
-  ggplot(aes(x = factor(year_id), y = mean_delta, color = toc, group = toc, fill = toc)) +
+  mutate(age_group_years_start = factor(age_group_years_start, 
+                                        levels = sort(unique(age_group_years_start)))) %>%  # ensures numeric order
+  ggplot(aes(x = factor(year_id), 
+             y = mean_delta, 
+             color = age_group_years_start, 
+             group = age_group_years_start, 
+             fill = age_group_years_start)) +
   geom_line(size = 1) +
   geom_point(size = 2) +
-  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci), alpha = 0.2, color = NA) +
+  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci, 
+                  group = age_group_years_start, 
+                  fill = age_group_years_start), 
+              alpha = 0.2, color = NA) +
   scale_color_jama() +
   scale_fill_jama() +
   scale_y_continuous(labels = scales::dollar_format()) +
   facet_wrap(~ race_cd) +
   labs(
-    title = "Cost Delta by Type of Care and Race Over Time (MSUD)",
-    subtitle = "Weighted difference in cost (MSUD+ vs MSUD−); 95% CI; 2019 USD",
+    title = "Cost Delta by Age and Race Over Time (SUD)",
+    subtitle = "Weighted difference in cost (SUD+ vs SUD−); 95% CI; 2019 USD",
     x = "Year", y = "Mean Cost Delta (USD)",
-    color = "Type of Care", fill = "Type of Care"
+    color = "Age", fill = "Age"
   ) +
   theme_minimal(base_size = 13) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-save_plot(plot7_modeled_delta_by_toc_and_race_facet_msud, "model_delta_cost_by_year_toc_facet_race_msud22")
+save_plot(plot7_modeled_delta_by_age_group_years_start_and_race_facet_msud, 
+          "model_delta_cost_by_year_age_group_years_start_facet_race_msud22")
 
 
 # summary(df_master)
@@ -448,7 +465,7 @@ save_plot(plot7_modeled_delta_by_toc_and_race_facet_msud, "model_delta_cost_by_y
 ########
 
 plot4_modeled <- df_master %>%
-  group_by(year_id, race_cd, toc) %>%
+  group_by(year_id, race_cd, age_group_years_start) %>%
   summarise(
     delta = weighted.mean(mean_delta_hiv, total_row_count, na.rm = TRUE),
     lower = weighted.mean(lower_ci_delta_hiv, total_row_count, na.rm = TRUE),
@@ -459,18 +476,18 @@ plot4_modeled <- df_master %>%
   geom_line(size = 1.1) +
   geom_point(size = 2) +
   geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.3) +
-  facet_wrap(~ toc) +
+  facet_wrap(~ age_group_years_start) +
   scale_color_jama() +
   scale_y_continuous(labels = scales::dollar_format()) +
   labs(
-    title = "Modeled Incremental Cost (HIV+ vs HIV−) by Year, Race, and Type of Care",
-    subtitle = "Weighted difference in cost; faceted by type of care",
+    title = "Modeled Incremental Cost (HIV+ vs HIV−) by Year, Race, and Age",
+    subtitle = "Weighted difference in cost; faceted by Age",
     x = "Year", y = "Incremental Cost (USD)", color = "Race"
   ) +
   theme_minimal(base_size = 13) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-save_plot(plot4_modeled, "model_delta_cost_by_year_race_facet_toc")
+save_plot(plot4_modeled, "model_delta_cost_by_year_race_facet_age_group_years_start")
 
 
 

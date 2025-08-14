@@ -546,7 +546,7 @@ df_tpe_t1 <- data_list$`04.Two_Part_Estimates_inflation_adjusted_aggregated_unfi
 
 # Group by summary to get 
 df_tpe_t1 <- df_tpe_t1 %>%
-  group_by(cause_name_lvl2, toc) %>%
+  group_by(cause_name_lvl2) %>%
   summarise(
     mean_cost = weighted.mean(mean_cost, w = total_row_count, na.rm = TRUE),
     lower_ci = weighted.mean(lower_ci, w = total_row_count, na.rm = TRUE),

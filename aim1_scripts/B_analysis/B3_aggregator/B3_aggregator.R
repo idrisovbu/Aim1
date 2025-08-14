@@ -473,9 +473,9 @@ write_csv(by_cause, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_
 by_year <- weighted_mean_all(df_input_tpe_filtered, c(cause_cols, "year_id"), value_cols, "total_row_count")
 write_csv(by_year, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_year.csv"))
 
-# By type of care (preserving both cause levels)
-by_toc <- weighted_mean_all(df_input_tpe_filtered, c(cause_cols, "toc"), value_cols, "total_row_count")
-write_csv(by_toc, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_toc.csv"))
+# # By type of care (preserving both cause levels)
+# by_toc <- weighted_mean_all(df_input_tpe_filtered, c(cause_cols, "toc"), value_cols, "total_row_count")
+# write_csv(by_toc, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_toc.csv"))
 
 # By race (preserving both cause levels)
 by_race <- weighted_mean_all(df_input_tpe_filtered, c(cause_cols, "race_cd"), value_cols, "total_row_count")
