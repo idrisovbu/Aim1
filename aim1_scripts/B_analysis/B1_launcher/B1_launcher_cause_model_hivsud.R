@@ -1,5 +1,5 @@
 ##----------------------------------------------------------------
-## Title: B1_launcher_cause_model.R  (by-cause array)
+## Title: B1_launcher_cause_model_hivsud.R  (by-cause array)
 ##----------------------------------------------------------------
 
 rm(list = ls())
@@ -38,11 +38,8 @@ df_files <- data.frame(directory = input_files) %>%
 
 # Define causes to run (safe to hardcode; worker will skip if absent)
 causes_to_run <- c(
-  "_enteric_all","_infect","_intent","_mental","_neo","_neuro","_ntd","_otherncd",
-  "_rf","_ri","_sense","cvd","diab_ckd","digest","_unintent","_well","resp",
-  "nutrition","inj_trans","msk","skin","mater_neonat","std"  # <- exclude hiv, _subs
+  "hiv", "_subs"  # <- only include HIV and Substance use disorder
 )
-
 
 df_causes <- data.frame(cause_name = causes_to_run, stringsAsFactors = FALSE)
 
@@ -52,14 +49,14 @@ df_params <- tidyr::crossing(df_files, df_causes)
 # Write params CSV
 param_dir <- file.path(l, "LU_CMS/DEX/hivsud/aim1/resources_aim1/")
 dir.create(param_dir, recursive = TRUE, showWarnings = FALSE)
-fp_parameters <- file.path(param_dir, "B1_two_part_model_parameters_aim1_BY_CAUSE.csv")
+fp_parameters <- file.path(param_dir, "B1_two_part_model_parameters_aim1_BY_CAUSE_HIVSUD.csv")
 fwrite(df_params, fp_parameters)
 
 ##----------------------------------------------------------------
 ## 2) Submit array: one task per (file, cause)
 ##----------------------------------------------------------------
 user        <- Sys.info()[["user"]]
-script_path <- file.path(h, "repo/Aim1/aim1_scripts/B_analysis/B2_worker/B2_worker_cause_model.R")
+script_path <- file.path(h, "repo/Aim1/aim1_scripts/B_analysis/B2_worker/B2_worker_cause_model_hivsud.R")
 log_dir     <- file.path(l, "LU_CMS/DEX/hivsud/aim1/B_analysis/logs")
 dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
 
@@ -69,7 +66,7 @@ bootstrap_iterations_RX  <- 15
 #### was running 1 hour with these specs. 
 
 jid <- SUBMIT_ARRAY_JOB(
-  name       = "B1_cause_model",
+  name       = "B1_cause_model_hivsud",
   script     = script_path,
   args       = c(fp_parameters, bootstrap_iterations_F2T, bootstrap_iterations_RX),
   error_dir  = log_dir,

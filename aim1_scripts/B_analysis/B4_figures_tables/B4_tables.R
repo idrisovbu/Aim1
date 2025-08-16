@@ -542,7 +542,9 @@ fwrite(df_ss_t3, file.path(output_tables_dir, "SS_T3.csv"))
 ##----------------------------------------------------------------
 
 # Set df
-df_tpe_t1 <- data_list$`04.Two_Part_Estimates_inflation_adjusted_aggregated_unfiltered`
+##FOR now reading in by cause data
+df_tpe_t1 <- data_list$`04.By_cause_inflation_adjusted_aggregated_unfiltered`
+#df_tpe_t1 <- data_list$`04.Two_Part_Estimates_inflation_adjusted_aggregated_unfiltered`
 
 # Group by summary to get 
 df_tpe_t1 <- df_tpe_t1 %>%
@@ -619,7 +621,9 @@ fwrite(df_tpe_t1, file.path(output_tables_dir, "TPE_T1.csv"))
 ##----------------------------------------------------------------
 
 # Set df
-df_tpe_t2 <- data_list$`04.Two_Part_Estimates_inflation_adjusted_aggregated_unfiltered`
+#df_tpe_t2 <- data_list$`04.Two_Part_Estimates_inflation_adjusted_aggregated_unfiltered`
+
+df_tpe_t2 <- data_list$`04.By_cause_inflation_adjusted_aggregated_unfiltered`
 
 # Group by summary to get 
 df_tpe_t2 <- df_tpe_t2 %>%
@@ -697,7 +701,8 @@ fwrite(df_tpe_t2, file.path(output_tables_dir, "TPE_T2.csv"))
 ##----------------------------------------------------------------
 
 # Set df
-df_tpe_t3 <- data_list$`04.Two_Part_Estimates_inflation_adjusted_aggregated_unfiltered`
+#df_tpe_t3 <- data_list$`04.Two_Part_Estimates_inflation_adjusted_aggregated_unfiltered`
+df_tpe_t3 <- data_list$`04.By_cause_inflation_adjusted_aggregated_unfiltered`
 
 # Group by summary to get 
 df_tpe_t3 <- df_tpe_t3 %>%

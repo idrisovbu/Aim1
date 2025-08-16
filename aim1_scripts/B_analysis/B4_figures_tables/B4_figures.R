@@ -68,27 +68,51 @@ save_plot <- function(ggplot_obj, ggplot_name, width = 12, height = 10, dpi = 50
 # 04 loading data and prep for vis
 ####################################
 
-df_master <- read.csv(file = file.path(input_dir, "04.Two_Part_Estimates_inflation_adjusted_aggregated.csv"))
+##Table to read in Two part model
+
+# df_master <- read.csv(file = file.path(input_dir, "04.Two_Part_Estimates_inflation_adjusted_aggregated.csv"))
+# # This is the master analytic table for Aim 1 (most granular: cause, year, type of care, race, age group).
+# 
+# df_sub_age        <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_age.csv"))
+# # Each row summarizes cost and incremental cost ("delta") by cause (lvl1/lvl2), stratified by age group, across all races, years, type of care, etc.
+# 
+# df_sub_cause      <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_cause.csv"))
+# # Aggregated by disease cause (lvl1/lvl2) only, pooling across years, ages, race, and type of care. Shows overall average costs and deltas for each disease category.
+# 
+# df_sub_cause_year <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_cause_year.csv"))
+# # Summarizes cost/deltas by cause and by year, so you can see temporal trends for each disease category.
+# 
+# df_sub_race       <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_race.csv"))
+# # Summarizes cost and delta by race (and by cause lvl1/lvl2), pooling over years, age, type of care, etc.
+# 
+# # df_sub_toc        <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_toc.csv"))
+# # # Summarizes by type of care (e.g., inpatient, outpatient, Rx), and disease.
+# 
+# df_sub_year       <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_year.csv"))
+# # Aggregated by year and disease cause, pooling across age, race, and type of care.
+
+
+
+df_master <- read.csv(file = file.path(input_dir, "04.By_cause_inflation_adjusted_aggregated_unfiltered.csv"))
 # This is the master analytic table for Aim 1 (most granular: cause, year, type of care, race, age group).
 
-df_sub_age        <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_age.csv"))
+df_sub_age        <- read_csv(file.path(input_dir, "04.By_cause_subtable_by_age.csv"))
 # Each row summarizes cost and incremental cost ("delta") by cause (lvl1/lvl2), stratified by age group, across all races, years, type of care, etc.
 
-df_sub_cause      <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_cause.csv"))
+df_sub_cause      <- read_csv(file.path(input_dir, "04.By_cause_subtable_by_cause.csv"))
 # Aggregated by disease cause (lvl1/lvl2) only, pooling across years, ages, race, and type of care. Shows overall average costs and deltas for each disease category.
 
-df_sub_cause_year <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_cause_year.csv"))
+df_sub_cause_year <- read_csv(file.path(input_dir, "04.By_cause__subtable_by_cause_year.csv"))
 # Summarizes cost/deltas by cause and by year, so you can see temporal trends for each disease category.
 
-df_sub_race       <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_race.csv"))
+df_sub_race       <- read_csv(file.path(input_dir, "04.By_cause_subtable_by_race.csv"))
 # Summarizes cost and delta by race (and by cause lvl1/lvl2), pooling over years, age, type of care, etc.
 
 # df_sub_toc        <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_toc.csv"))
 # # Summarizes by type of care (e.g., inpatient, outpatient, Rx), and disease.
 
-df_sub_year       <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_year.csv"))
+df_sub_year       <- read_csv(file.path(input_dir, "04.By_cause_subtable_by_year.csv"))
 # Aggregated by year and disease cause, pooling across age, race, and type of care.
-
 
 
 ####################################

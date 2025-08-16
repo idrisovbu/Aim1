@@ -53,6 +53,7 @@ input_summary_stats <- file.path(base_dir, "01.Summary_Statistics", date_of_inpu
 input_regression_estimates <- file.path(base_dir, "02.Regression_Estimates", date_of_input)
 input_meta_stats <- file.path(base_dir, "03.Meta_Statistics", date_of_input) 
 input_two_part <- file.path(base_dir, "04.Two_Part_Estimates", date_of_input, "bootstrap_results")
+by_cause <- file.path(base_dir, "04.Two_Part_Estimates", date_of_input, "results")
 
 # Define output directory
 date_of_output <- format(Sys.time(), "%Y%m%d")
@@ -366,8 +367,9 @@ write_csv(total_bene_by_year, output_file_by_year)
 output_file_by_year_toc <- file.path(output_folder, "03.Meta_Statistics_subtable_bene_by_year_by_toc.csv")
 write_csv(total_bene_by_year_toc, output_file_by_year_toc)
 
+
 ##----------------------------------------------------------------
-## 4. Aggregate & Summarize - 04.Two_Part_Estimates
+## 4. Aggregate & Summarize - 04.Two_Part_Estimates: BY CAUSE
 ##----------------------------------------------------------------
 
 ##----------------------------------------------------------------
@@ -375,10 +377,11 @@ write_csv(total_bene_by_year_toc, output_file_by_year_toc)
 ##----------------------------------------------------------------
 
 # Get the list of all CSV files from the input directory
-files_list_tpe <- list.files(input_two_part, pattern = "\\.csv$", full.names = TRUE) 
+files_list_by_cause <- list.files(input_two_part, pattern = "\\.csv$", full.names = TRUE)
+# TODO - create above file list then filter out in the full names filepath any filepath that has "hiv" or "_sud" in it to remove these particular results
 
 # Read files
-df_input_tpe <- map_dfr(files_list_tpe, ~read_csv(.x, show_col_types = FALSE))
+df_input_by_cause <- map_dfr(files_list_by_cause, ~read_csv(.x, show_col_types = FALSE))
 
 ##----------------------------------------------------------------
 ## 4.2 Inflation adjustment and mapping 
@@ -397,8 +400,8 @@ cost_columns <- c(
 )
 
 
-df_input_tpe <- deflate(
-  data = df_input_tpe,
+df_input_by_cause <- deflate(
+  data = df_input_by_cause,
   val_columns = cost_columns,
   old_year = "year_id",
   new_year = 2019
@@ -416,7 +419,7 @@ df_map <- read_csv("/mnt/share/dex/us_county/maps/causelist_figures.csv", show_c
   ) %>% select(-acause) %>% unique()
 
 # Join with df_map (cause map table)
-df_input_tpe <- df_input_tpe %>%
+df_input_by_cause <- df_input_by_cause %>%
   left_join(df_map, by = "acause_lvl2") %>%
   relocate(acause_lvl2, cause_name_lvl2, acause_lvl1, cause_name_lvl1, .before = year_id)
 
@@ -426,9 +429,9 @@ df_input_tpe <- df_input_tpe %>%
 #--------------------------------------------
 # 4.3.1. Save full aggregated table (all causes)
 #--------------------------------------------
-output_file_tpe_full <- file.path(output_folder, "04.Two_Part_Estimates_inflation_adjusted_aggregated_unfiltered.csv")
-write_csv(df_input_tpe, output_file_tpe_full)
-cat("Full (all causes) table saved to:", output_file_tpe_full, "\n")
+output_file_by_cause_full <- file.path(output_folder, "04.By_cause_inflation_adjusted_aggregated_unfiltered.csv")
+write_csv(df_input_by_cause, output_file_by_cause_full)
+cat("Full (all causes) table saved to:", output_file_by_cause_full, "\n")
 
 #--------------------------------------------
 # 4.3.2 Exclude selected causes and save filtered table
@@ -436,12 +439,12 @@ cat("Full (all causes) table saved to:", output_file_tpe_full, "\n")
 causes_to_exclude <- c("_subs", "_mental", "mater_neonat", "hiv", "_rf", "_well", "_sense")
 
 # Filter out unwanted causes
-df_input_tpe_filtered <- df_input_tpe %>%
+df_input_by_cause_filtered <- df_input_by_cause %>%
   filter(!acause_lvl2 %in% causes_to_exclude)
 
-output_file_tpe_filtered <- file.path(output_folder, "04.Two_Part_Estimates_inflation_adjusted_aggregated.csv")
-write_csv(df_input_tpe_filtered, output_file_tpe_filtered)
-cat("Filtered (excluded causes) table saved to:", output_file_tpe_filtered, "\n")
+output_file_by_cause_filtered <- file.path(output_folder, "04.By_cause_inflation_adjusted_aggregated.csv")
+write_csv(df_input_tpe_filtered, output_file_by_cause_filtered)
+cat("Filtered (excluded causes) table saved to:", output_file_by_cause_filtered, "\n")
 
 
 
@@ -466,28 +469,29 @@ value_cols <- c(
 )
 
 # By cause (Level 2 + Level 1)
-by_cause <- weighted_mean_all(df_input_tpe_filtered, cause_cols, value_cols, "total_row_count")
-write_csv(by_cause, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_cause.csv"))
+by_cause <- weighted_mean_all(df_input_by_cause_filtered, cause_cols, value_cols, "total_row_count")
+write_csv(by_cause, file.path(output_folder, "04.By_cause_subtable_by_cause.csv"))
 
 # By year (preserving both cause levels)
-by_year <- weighted_mean_all(df_input_tpe_filtered, c(cause_cols, "year_id"), value_cols, "total_row_count")
-write_csv(by_year, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_year.csv"))
+by_year <- weighted_mean_all(df_input_by_cause_filtered, c(cause_cols, "year_id"), value_cols, "total_row_count")
+write_csv(by_year, file.path(output_folder, "04.By_cause_subtable_by_year.csv"))
 
 # # By type of care (preserving both cause levels)
 # by_toc <- weighted_mean_all(df_input_tpe_filtered, c(cause_cols, "toc"), value_cols, "total_row_count")
 # write_csv(by_toc, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_toc.csv"))
 
 # By race (preserving both cause levels)
-by_race <- weighted_mean_all(df_input_tpe_filtered, c(cause_cols, "race_cd"), value_cols, "total_row_count")
-write_csv(by_race, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_race.csv"))
+by_race <- weighted_mean_all(df_input_by_cause_filtered, c(cause_cols, "race_cd"), value_cols, "total_row_count")
+write_csv(by_race, file.path(output_folder, "04.By_cause_subtable_by_race.csv"))
 
 # By age group (preserving both cause levels)
-by_age <- weighted_mean_all(df_input_tpe_filtered, c(cause_cols, "age_group_years_start"), value_cols, "total_row_count")
-write_csv(by_age, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_age.csv"))
+by_age <- weighted_mean_all(df_input_by_cause_filtered, c(cause_cols, "age_group_years_start"), value_cols, "total_row_count")
+write_csv(by_age, file.path(output_folder, "04.By_cause_subtable_by_age.csv"))
 
 # Example: By cause and year (joint stratification, cause levels always present)
-by_cause_year <- weighted_mean_all(df_input_tpe_filtered, c(cause_cols, "year_id"), value_cols, "total_row_count")
-write_csv(by_cause_year, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_cause_year.csv"))
+by_cause_year <- weighted_mean_all(df_input_by_cause_filtered, c(cause_cols, "year_id"), value_cols, "total_row_count")
+write_csv(by_cause_year, file.path(output_folder, "04.By_cause_subtable_by_cause_year.csv"))
 
 cat("All subtables (with cause levels preserved) have been saved to CSV in ", output_folder, "\n")
+
 
