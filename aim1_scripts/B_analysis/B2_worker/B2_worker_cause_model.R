@@ -79,14 +79,14 @@ if (Sys.info()["sysname"] == 'Linux'){
 ## 0) Read args / data
 ##---------------------------
 if (interactive()) {
-  path <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/bested/aggregated_by_year/compiled_F2T_data_2015_age85.parquet"
+  path <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/bested/aggregated_by_year/compiled_F2T_data_2014_age70.parquet"
   df <- open_dataset(path) %>% collect() %>% as.data.table()
-  year_id <- 2015
+  year_id <- df$year_id[1]
   file_type <- "F2T"
   age_group_years_start <- df$age_group_years_start[1]
   bootstrap_iterations_F2T <- 10
   bootstrap_iterations_RX  <- 1
-  cause_name <- "_enteric_all"            # <— set a single cause for local testing
+  cause_name <- "_neo"            # <— set a single cause for local testing
 } else {
   args <- commandArgs(trailingOnly = TRUE)
   fp_parameters_input       <- args[1]

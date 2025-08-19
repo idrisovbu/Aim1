@@ -36,12 +36,12 @@ if (dir.exists("/mnt/share/limited_use")) {
   input_dir <- file.path(base_dir, "05.Aggregation_Summary/bested/")
   output_tables_dir <- file.path(base_dir, "07.Tables/", date_today)
   resources_dir <- file.path(base_dir, "resources/")
+  if (!dir.exists(resources_dir)) dir.create(resources_dir, recursive = TRUE)
 }
 
 # Create output directory for today's date
 if (!dir.exists(base_dir)) dir.create(base_dir, recursive = TRUE)
 if (!dir.exists(output_tables_dir)) dir.create(output_tables_dir, recursive = TRUE)
-if (!dir.exists(resources_dir)) dir.create(resources_dir, recursive = TRUE)
 
 ##----------------------------------------------------------------
 ## 0.1 Functions

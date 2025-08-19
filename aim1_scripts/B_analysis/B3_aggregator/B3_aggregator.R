@@ -52,7 +52,6 @@ base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis"
 input_summary_stats <- file.path(base_dir, "01.Summary_Statistics", date_of_input)
 input_regression_estimates <- file.path(base_dir, "02.Regression_Estimates", date_of_input)
 input_meta_stats <- file.path(base_dir, "03.Meta_Statistics", date_of_input) 
-input_two_part <- file.path(base_dir, "04.Two_Part_Estimates", date_of_input, "bootstrap_results")
 input_by_cause <- file.path(base_dir, "04.Two_Part_Estimates", date_of_input, "results")
 
 # Define output directory
@@ -410,12 +409,18 @@ path_is_hiv_or_sud <- function(x) {
 
 files_list_by_cause <- files_list_by_cause_all[!vapply(files_list_by_cause_all, path_is_hiv_or_sud, logical(1))]
 
-# read; if nothing found, create empty tibble to avoid errors downstream
-df_input_by_cause <- if (length(files_list_by_cause)) {
-  purrr::map_dfr(files_list_by_cause, ~readr::read_csv(.x, show_col_types = FALSE))
-} else {
-  tibble::tibble()
-}
+# read in tables
+df_input_by_cause <- rbindlist(
+  lapply(files_list_by_cause, fread)
+  #,idcol = "source_file" # uncomment this if you want to add the file number
+)
+
+# Checking why there are NA values in certain rows / columns
+# DT <- df_input_by_cause[!complete.cases(df_input_by_cause)]
+# 
+# View(df_input_by_cause[apply(is.na(df_input_by_cause), 1, any)])
+# df_nas <- df_input_by_cause[apply(is.na(df_input_by_cause), 1, any)] 
+# write.csv(df_nas, file = file.path(base_dir, "df_nas.csv"))
 
 # extra safety: if a few rows slipped in, drop them by content
 if ("acause_lvl2" %in% names(df_input_by_cause)) {
@@ -471,7 +476,7 @@ readr::write_csv(df_input_by_cause, output_file_by_cause_full)
 cat("Full (all non-HIV/SUD causes) table saved to:", output_file_by_cause_full, "\n")
 
 # optional additional exclusions beyond HIV/SUD if desired
-causes_to_exclude <- c("_mental", "mater_neonat", "_rf", "_well", "_sense")
+causes_to_exclude <- c("_mental", "mater_neonat", "_rf", "_well", "_sense") # Excluding these + HIV & SUD results in 18 causes
 df_input_by_cause_filtered <- df_input_by_cause %>%
   dplyr::filter(!acause_lvl2 %in% causes_to_exclude)
 
@@ -486,8 +491,8 @@ value_cols <- c(
   "mean_cost_hiv","lower_ci_hiv","upper_ci_hiv",
   "mean_cost_sud","lower_ci_sud","upper_ci_sud",
   "mean_cost_hiv_sud","lower_ci_hiv_sud","upper_ci_hiv_sud",
-  "mean_delta_hiv","lower_ci_delta_hiv","upper_ci_delta_hiv",
-  "mean_delta_sud","lower_ci_delta_sud","upper_ci_delta_sud",
+  "mean_delta_hiv_only","lower_ci_delta_hiv_only","upper_ci_delta_hiv_only",
+  "mean_delta_sud_only","lower_ci_delta_sud_only","upper_ci_delta_sud_only",
   "mean_delta_hiv_sud","lower_ci_delta_hiv_sud","upper_ci_delta_hiv_sud"
 )
 
@@ -508,14 +513,13 @@ readr::write_csv(by_cause_year, file.path(output_folder, "04.By_cause_subtable_b
 
 cat("All by-cause subtables saved in", output_folder, "\n")
 
-
+# Elements `mean_delta_hiv`, `lower_ci_delta_hiv`, `upper_ci_delta_hiv`, `mean_delta_sud`, `lower_ci_delta_sud`, etc. don't exist.
 
 ##----------------------------------------------------------------
 ## 5. Aggregate & Summarize - HIV and SUD (by-cause folders)
 ##----------------------------------------------------------------
 
 # Find all CSVs recursively under results/
-
 all_csvs <- list.files(input_by_cause, pattern = "\\.csv$", full.names = TRUE, recursive = TRUE)
 
 # Helper to check path segments
@@ -601,15 +605,15 @@ if (!is.null(df_sud) && nrow(df_sud)) {
 
 ## 5.4 Subtables
 cause_cols <- c("acause_lvl1","cause_name_lvl1","acause_lvl2","cause_name_lvl2")
-value_cols <- intersect(c(
-  "mean_cost_hiv","lower_ci_hiv","upper_ci_hiv",
-  "mean_delta_hiv_only","lower_ci_delta_hiv_only","upper_ci_delta_hiv_only",
-  "mean_cost_sud","lower_ci_sud","upper_ci_sud",
-  "mean_delta_sud_only","lower_ci_delta_sud_only","upper_ci_delta_sud_only",
-  "mean_cost_hiv_sud","lower_ci_hiv_sud","upper_ci_hiv_sud"
-), names(rbind(df_hiv[0,], df_sud[0,])))
 
-write_subtables <- function(df, prefix) {
+value_cols_hiv <- c("mean_cost_hiv", "lower_ci_hiv", "upper_ci_hiv", 
+                    "mean_cost_hiv_sud", "lower_ci_hiv_sud", "upper_ci_hiv_sud", 
+                    "mean_delta_sud_only", "lower_ci_delta_sud_only", "upper_ci_delta_sud_only")
+value_cols_sud <- c("mean_cost_sud", "lower_ci_sud", "upper_ci_sud", 
+                    "mean_cost_hiv_sud", "lower_ci_hiv_sud", "upper_ci_hiv_sud", 
+                    "mean_delta_hiv_only", "lower_ci_delta_hiv_only", "upper_ci_delta_hiv_only")
+
+write_subtables <- function(df, prefix, value_cols) {
   if (is.null(df) || nrow(df) == 0L) return(invisible(NULL))
   by_cause_tbl      <- weighted_mean_all(df, cause_cols, value_cols, "total_row_count")
   by_year_tbl       <- weighted_mean_all(df, c(cause_cols, "year_id"), value_cols, "total_row_count")
@@ -624,8 +628,8 @@ write_subtables <- function(df, prefix) {
   readr::write_csv(by_cause_year_tbl, file.path(output_folder, paste0(prefix, "_subtable_by_cause_year.csv")))
 }
 
-write_subtables(df_hiv, "05.HIV")
-write_subtables(df_sud, "05.SUD")
+write_subtables(df_hiv, "05.HIV", value_cols_hiv)
+write_subtables(df_sud, "05.SUD", value_cols_sud)
 
 cat("Separate HIV and SUD subtables saved in:", output_folder, "\n")
 
