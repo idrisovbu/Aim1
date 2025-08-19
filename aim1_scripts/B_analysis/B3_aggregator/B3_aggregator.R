@@ -53,7 +53,7 @@ input_summary_stats <- file.path(base_dir, "01.Summary_Statistics", date_of_inpu
 input_regression_estimates <- file.path(base_dir, "02.Regression_Estimates", date_of_input)
 input_meta_stats <- file.path(base_dir, "03.Meta_Statistics", date_of_input) 
 input_two_part <- file.path(base_dir, "04.Two_Part_Estimates", date_of_input, "bootstrap_results")
-by_cause <- file.path(base_dir, "04.Two_Part_Estimates", date_of_input, "results")
+input_by_cause <- file.path(base_dir, "04.Two_Part_Estimates", date_of_input, "results")
 
 # Define output directory
 date_of_output <- format(Sys.time(), "%Y%m%d")
@@ -94,6 +94,28 @@ weighted_mean_all <- function(df, group_cols, value_cols, weight_col) {
       .groups = "drop"
     )
 }
+
+### the funciton below will remove cases when raw count is zero:
+# weighted_mean_all <- function(df, group_cols, value_cols, weight_col) {
+#   df %>%
+#     dplyr::group_by(dplyr::across(dplyr::all_of(group_cols))) %>%
+#     dplyr::summarise(
+#       total_bin_count = sum(.data[[weight_col]], na.rm = TRUE),
+#       dplyr::across(
+#         dplyr::all_of(value_cols),
+#         ~ {
+#           w <- .data[[weight_col]]
+#           sw <- sum(w, na.rm = TRUE)
+#           if (is.finite(sw) && sw > 0) weighted.mean(.x, w, na.rm = TRUE) else NA_real_
+#         },
+#         .names = "{.col}"
+#       ),
+#       .groups = "drop"
+#     ) %>%
+#     # optional: drop zero-weight groups entirely
+#     dplyr::filter(total_bin_count > 0)
+# }
+
 
 
 ##----------------------------------------------------------------
@@ -373,91 +395,92 @@ write_csv(total_bene_by_year_toc, output_file_by_year_toc)
 ##----------------------------------------------------------------
 
 ##----------------------------------------------------------------
-## 4.1 Read in data
+## 4. Aggregate & Summarize - 04.Two_Part_Estimates: BY CAUSE (exclude HIV/SUD)
 ##----------------------------------------------------------------
 
-# Get the list of all CSV files from the input directory
-files_list_by_cause <- list.files(input_two_part, pattern = "\\.csv$", full.names = TRUE)
-# TODO - create above file list then filter out in the full names filepath any filepath that has "hiv" or "_sud" in it to remove these particular results
+## 4.1 Read in data (exclude any HIV / SUD files by path and by content)
+files_list_by_cause_all <- list.files(input_by_cause, pattern = "\\.csv$", full.names = TRUE, recursive = TRUE)
 
-# Read files
-df_input_by_cause <- map_dfr(files_list_by_cause, ~read_csv(.x, show_col_types = FALSE))
+# helper: does any path segment indicate hiv or sud/subs?
+path_is_hiv_or_sud <- function(x) {
+  segs <- unlist(strsplit(x, "/|\\\\"))
+  any(grepl("^hiv$", segs, ignore.case = TRUE) |
+        grepl("^_sud$|^_subs$", segs, ignore.case = TRUE))
+}
 
-##----------------------------------------------------------------
-## 4.2 Inflation adjustment and mapping 
-##----------------------------------------------------------------
+files_list_by_cause <- files_list_by_cause_all[!vapply(files_list_by_cause_all, path_is_hiv_or_sud, logical(1))]
 
-# cost column to adjust for inflation
+# read; if nothing found, create empty tibble to avoid errors downstream
+df_input_by_cause <- if (length(files_list_by_cause)) {
+  purrr::map_dfr(files_list_by_cause, ~readr::read_csv(.x, show_col_types = FALSE))
+} else {
+  tibble::tibble()
+}
 
+# extra safety: if a few rows slipped in, drop them by content
+if ("acause_lvl2" %in% names(df_input_by_cause)) {
+  df_input_by_cause <- df_input_by_cause %>%
+    dplyr::filter(!acause_lvl2 %in% c("hiv", "_sud", "_subs"))
+}
+
+## 4.2 Inflation adjustment and mapping
 cost_columns <- c(
-  "mean_cost",        "lower_ci",        "upper_ci",
-  "mean_cost_hiv",    "lower_ci_hiv",    "upper_ci_hiv",
-  "mean_cost_sud",    "lower_ci_sud",    "upper_ci_sud",
+  "mean_cost","lower_ci","upper_ci",
+  "mean_cost_hiv","lower_ci_hiv","upper_ci_hiv",
+  "mean_cost_sud","lower_ci_sud","upper_ci_sud",
   "mean_cost_hiv_sud","lower_ci_hiv_sud","upper_ci_hiv_sud",
-  "mean_delta_hiv",   "lower_ci_delta_hiv",   "upper_ci_delta_hiv",
-  "mean_delta_sud",   "lower_ci_delta_sud",   "upper_ci_delta_sud",
-  "mean_delta_hiv_sud", "lower_ci_delta_hiv_sud", "upper_ci_delta_hiv_sud"
+  "mean_delta_hiv","lower_ci_delta_hiv","upper_ci_delta_hiv",
+  "mean_delta_sud","lower_ci_delta_sud","upper_ci_delta_sud",
+  "mean_delta_hiv_sud","lower_ci_delta_hiv_sud","upper_ci_delta_hiv_sud"
 )
 
+if (nrow(df_input_by_cause)) {
+  df_input_by_cause <- deflate(
+    data        = df_input_by_cause,
+    val_columns = intersect(cost_columns, names(df_input_by_cause)),
+    old_year    = "year_id",
+    new_year    = 2019
+  )
+}
 
-df_input_by_cause <- deflate(
-  data = df_input_by_cause,
-  val_columns = cost_columns,
-  old_year = "year_id",
-  new_year = 2019
-)
+# cause names
+df_map <- readr::read_csv("/mnt/share/dex/us_county/maps/causelist_figures.csv", show_col_types = FALSE) %>%
+  dplyr::select(acause, acause_lvl2, cause_name_lvl2, acause_lvl1, cause_name_lvl1) %>%
+  dplyr::mutate(
+    acause_lvl2     = dplyr::if_else(acause == "hiv", "hiv", acause_lvl2),
+    cause_name_lvl2 = dplyr::if_else(acause == "hiv", "HIV/AIDS", cause_name_lvl2),
+    acause_lvl2     = dplyr::if_else(acause == "std", "std", acause_lvl2),
+    cause_name_lvl2 = dplyr::if_else(acause == "std", "Sexually transmitted infections", cause_name_lvl2)
+  ) %>%
+  dplyr::select(-acause) %>%
+  dplyr::distinct()
 
+if (nrow(df_input_by_cause)) {
+  df_input_by_cause <- df_input_by_cause %>%
+    dplyr::left_join(df_map, by = "acause_lvl2") %>%
+    dplyr::relocate(acause_lvl2, cause_name_lvl2, acause_lvl1, cause_name_lvl1, .before = year_id)
+}
 
-# Load and clean the mapping file
-df_map <- read_csv("/mnt/share/dex/us_county/maps/causelist_figures.csv", show_col_types = FALSE) %>%
-  select(acause, acause_lvl2, cause_name_lvl2, acause_lvl1, cause_name_lvl1) %>%
-  mutate(
-    acause_lvl2      = if_else(acause == "hiv", "hiv", acause_lvl2),
-    cause_name_lvl2  = if_else(acause == "hiv", "HIV/AIDS", cause_name_lvl2),
-    acause_lvl2      = if_else(acause == "std", "std", acause_lvl2),
-    cause_name_lvl2  = if_else(acause == "std", "Sexually transmitted infections", cause_name_lvl2)
-  ) %>% select(-acause) %>% unique()
+# ensure a weight exists; NA weights -> 0 so they don’t distort means
+if (!("total_row_count" %in% names(df_input_by_cause))) df_input_by_cause$total_row_count <- NA_real_
+df_input_by_cause$total_row_count <- dplyr::coalesce(df_input_by_cause$total_row_count, 0)
 
-# Join with df_map (cause map table)
-df_input_by_cause <- df_input_by_cause %>%
-  left_join(df_map, by = "acause_lvl2") %>%
-  relocate(acause_lvl2, cause_name_lvl2, acause_lvl1, cause_name_lvl1, .before = year_id)
-
-##----------------------------------------------------------------
 ## 4.3 Save adjusted table Two Part Estimates to CSV
-##----------------------------------------------------------------
-#--------------------------------------------
-# 4.3.1. Save full aggregated table (all causes)
-#--------------------------------------------
 output_file_by_cause_full <- file.path(output_folder, "04.By_cause_inflation_adjusted_aggregated_unfiltered.csv")
-write_csv(df_input_by_cause, output_file_by_cause_full)
-cat("Full (all causes) table saved to:", output_file_by_cause_full, "\n")
+readr::write_csv(df_input_by_cause, output_file_by_cause_full)
+cat("Full (all non-HIV/SUD causes) table saved to:", output_file_by_cause_full, "\n")
 
-#--------------------------------------------
-# 4.3.2 Exclude selected causes and save filtered table
-#--------------------------------------------
-causes_to_exclude <- c("_subs", "_mental", "mater_neonat", "hiv", "_rf", "_well", "_sense")
-
-# Filter out unwanted causes
+# optional additional exclusions beyond HIV/SUD if desired
+causes_to_exclude <- c("_mental", "mater_neonat", "_rf", "_well", "_sense")
 df_input_by_cause_filtered <- df_input_by_cause %>%
-  filter(!acause_lvl2 %in% causes_to_exclude)
+  dplyr::filter(!acause_lvl2 %in% causes_to_exclude)
 
 output_file_by_cause_filtered <- file.path(output_folder, "04.By_cause_inflation_adjusted_aggregated.csv")
-write_csv(df_input_tpe_filtered, output_file_by_cause_filtered)
-cat("Filtered (excluded causes) table saved to:", output_file_by_cause_filtered, "\n")
+readr::write_csv(df_input_by_cause_filtered, output_file_by_cause_filtered)
+cat("Filtered (selected causes removed) table saved to:", output_file_by_cause_filtered, "\n")
 
-
-
-##----------------------------------------------------------------
-## 4.4 Create sub-tables from main aggregated TPE table
-##----------------------------------------------------------------
-
-######## General Subtables
-
-# Columns to *always* include in the grouping
+## 4.4 Subtables from the main aggregated table
 cause_cols <- c("acause_lvl1", "cause_name_lvl1", "acause_lvl2", "cause_name_lvl2")
-
-# Value columns
 value_cols <- c(
   "mean_cost","lower_ci","upper_ci",
   "mean_cost_hiv","lower_ci_hiv","upper_ci_hiv",
@@ -468,30 +491,141 @@ value_cols <- c(
   "mean_delta_hiv_sud","lower_ci_delta_hiv_sud","upper_ci_delta_hiv_sud"
 )
 
-# By cause (Level 2 + Level 1)
 by_cause <- weighted_mean_all(df_input_by_cause_filtered, cause_cols, value_cols, "total_row_count")
-write_csv(by_cause, file.path(output_folder, "04.By_cause_subtable_by_cause.csv"))
+readr::write_csv(by_cause, file.path(output_folder, "04.By_cause_subtable_by_cause.csv"))
 
-# By year (preserving both cause levels)
 by_year <- weighted_mean_all(df_input_by_cause_filtered, c(cause_cols, "year_id"), value_cols, "total_row_count")
-write_csv(by_year, file.path(output_folder, "04.By_cause_subtable_by_year.csv"))
+readr::write_csv(by_year, file.path(output_folder, "04.By_cause_subtable_by_year.csv"))
 
-# # By type of care (preserving both cause levels)
-# by_toc <- weighted_mean_all(df_input_tpe_filtered, c(cause_cols, "toc"), value_cols, "total_row_count")
-# write_csv(by_toc, file.path(output_folder, "04.Two_Part_Estimates_subtable_by_toc.csv"))
-
-# By race (preserving both cause levels)
 by_race <- weighted_mean_all(df_input_by_cause_filtered, c(cause_cols, "race_cd"), value_cols, "total_row_count")
-write_csv(by_race, file.path(output_folder, "04.By_cause_subtable_by_race.csv"))
+readr::write_csv(by_race, file.path(output_folder, "04.By_cause_subtable_by_race.csv"))
 
-# By age group (preserving both cause levels)
 by_age <- weighted_mean_all(df_input_by_cause_filtered, c(cause_cols, "age_group_years_start"), value_cols, "total_row_count")
-write_csv(by_age, file.path(output_folder, "04.By_cause_subtable_by_age.csv"))
+readr::write_csv(by_age, file.path(output_folder, "04.By_cause_subtable_by_age.csv"))
 
-# Example: By cause and year (joint stratification, cause levels always present)
 by_cause_year <- weighted_mean_all(df_input_by_cause_filtered, c(cause_cols, "year_id"), value_cols, "total_row_count")
-write_csv(by_cause_year, file.path(output_folder, "04.By_cause_subtable_by_cause_year.csv"))
+readr::write_csv(by_cause_year, file.path(output_folder, "04.By_cause_subtable_by_cause_year.csv"))
 
-cat("All subtables (with cause levels preserved) have been saved to CSV in ", output_folder, "\n")
+cat("All by-cause subtables saved in", output_folder, "\n")
 
+
+
+##----------------------------------------------------------------
+## 5. Aggregate & Summarize - HIV and SUD (by-cause folders)
+##----------------------------------------------------------------
+
+# Find all CSVs recursively under results/
+
+all_csvs <- list.files(input_by_cause, pattern = "\\.csv$", full.names = TRUE, recursive = TRUE)
+
+# Helper to check path segments
+path_has <- function(x, patt) {
+  segs <- unlist(strsplit(x, "/|\\\\"))
+  any(grepl(patt, segs, ignore.case = TRUE))
+}
+
+# Partition file lists
+hiv_files <- all_csvs[vapply(all_csvs, function(x) path_has(x, "^hiv$"), logical(1))]
+sud_files <- all_csvs[vapply(all_csvs, function(x) path_has(x, "^_sud$|^_subs$"), logical(1))]
+
+cat("HIV files:", length(hiv_files), " | SUD files:", length(sud_files), "\n")
+if (length(hiv_files) == 0L && length(sud_files) == 0L) {
+  stop("No HIV or SUD CSV files found under: ", by_cause)
+}
+
+# Read
+df_hiv_raw <- if (length(hiv_files)) purrr::map_dfr(hiv_files, ~readr::read_csv(.x, show_col_types = FALSE)) else NULL
+df_sud_raw <- if (length(sud_files)) purrr::map_dfr(sud_files, ~readr::read_csv(.x, show_col_types = FALSE)) else NULL
+
+## 5.2 Deflate (only columns present)
+cost_columns <- c(
+  "mean_cost_hiv","lower_ci_hiv","upper_ci_hiv",
+  "mean_cost_sud","lower_ci_sud","upper_ci_sud",
+  "mean_cost_hiv_sud","lower_ci_hiv_sud","upper_ci_hiv_sud",
+  "mean_delta_hiv_only","lower_ci_delta_hiv_only","upper_ci_delta_hiv_only",
+  "mean_delta_sud_only","lower_ci_delta_sud_only","upper_ci_delta_sud_only"
+)
+
+deflate_if_present <- function(df) {
+  if (is.null(df) || nrow(df) == 0L) return(df)
+  deflate(df, val_columns = intersect(cost_columns, names(df)), old_year = "year_id", new_year = 2019)
+}
+
+df_hiv <- deflate_if_present(df_hiv_raw)
+df_sud <- deflate_if_present(df_sud_raw)
+
+# mapping
+df_map <- readr::read_csv("/mnt/share/dex/us_county/maps/causelist_figures.csv", show_col_types = FALSE) %>%
+  dplyr::select(acause, acause_lvl2, cause_name_lvl2, acause_lvl1, cause_name_lvl1) %>%
+  dplyr::mutate(
+    acause_lvl2     = dplyr::if_else(acause == "hiv", "hiv", acause_lvl2),
+    cause_name_lvl2 = dplyr::if_else(acause == "hiv", "HIV/AIDS", cause_name_lvl2),
+    acause_lvl2     = dplyr::if_else(acause == "std", "std", acause_lvl2),
+    cause_name_lvl2 = dplyr::if_else(acause == "std", "Sexually transmitted infections", cause_name_lvl2)
+  ) %>%
+  dplyr::select(-acause) %>%
+  dplyr::distinct()
+
+join_and_order <- function(df) {
+  if (is.null(df) || nrow(df) == 0L) return(df)
+  df %>%
+    dplyr::left_join(df_map, by = "acause_lvl2") %>%
+    dplyr::relocate(acause_lvl2, cause_name_lvl2, acause_lvl1, cause_name_lvl1, .before = year_id)
+}
+
+df_hiv <- join_and_order(df_hiv)
+df_sud <- join_and_order(df_sud)
+
+# ensure weight exists and is usable
+ensure_weight <- function(df) {
+  if (is.null(df) || nrow(df) == 0L) return(df)
+  if (!("total_row_count" %in% names(df))) df$total_row_count <- NA_real_
+  df$total_row_count <- dplyr::coalesce(df$total_row_count, 0)
+  df
+}
+df_hiv <- ensure_weight(df_hiv)
+df_sud <- ensure_weight(df_sud)
+
+## 5.3 Save adjusted aggregated tables (separate HIV and SUD)
+if (!is.null(df_hiv) && nrow(df_hiv)) {
+  out_hiv <- file.path(output_folder, "05.HIV_inflation_adjusted_aggregated.csv")
+  readr::write_csv(df_hiv, out_hiv)
+  cat("HIV aggregated table saved to:", out_hiv, "\n")
+} else cat("No HIV rows to save.\n")
+
+if (!is.null(df_sud) && nrow(df_sud)) {
+  out_sud <- file.path(output_folder, "05.SUD_inflation_adjusted_aggregated.csv")
+  readr::write_csv(df_sud, out_sud)
+  cat("SUD aggregated table saved to:", out_sud, "\n")
+} else cat("No SUD rows to save.\n")
+
+## 5.4 Subtables
+cause_cols <- c("acause_lvl1","cause_name_lvl1","acause_lvl2","cause_name_lvl2")
+value_cols <- intersect(c(
+  "mean_cost_hiv","lower_ci_hiv","upper_ci_hiv",
+  "mean_delta_hiv_only","lower_ci_delta_hiv_only","upper_ci_delta_hiv_only",
+  "mean_cost_sud","lower_ci_sud","upper_ci_sud",
+  "mean_delta_sud_only","lower_ci_delta_sud_only","upper_ci_delta_sud_only",
+  "mean_cost_hiv_sud","lower_ci_hiv_sud","upper_ci_hiv_sud"
+), names(rbind(df_hiv[0,], df_sud[0,])))
+
+write_subtables <- function(df, prefix) {
+  if (is.null(df) || nrow(df) == 0L) return(invisible(NULL))
+  by_cause_tbl      <- weighted_mean_all(df, cause_cols, value_cols, "total_row_count")
+  by_year_tbl       <- weighted_mean_all(df, c(cause_cols, "year_id"), value_cols, "total_row_count")
+  by_race_tbl       <- weighted_mean_all(df, c(cause_cols, "race_cd"), value_cols, "total_row_count")
+  by_age_tbl        <- weighted_mean_all(df, c(cause_cols, "age_group_years_start"), value_cols, "total_row_count")
+  by_cause_year_tbl <- weighted_mean_all(df, c(cause_cols, "year_id"), value_cols, "total_row_count")
+  
+  readr::write_csv(by_cause_tbl,      file.path(output_folder, paste0(prefix, "_subtable_by_cause.csv")))
+  readr::write_csv(by_year_tbl,       file.path(output_folder, paste0(prefix, "_subtable_by_year.csv")))
+  readr::write_csv(by_race_tbl,       file.path(output_folder, paste0(prefix, "_subtable_by_race.csv")))
+  readr::write_csv(by_age_tbl,        file.path(output_folder, paste0(prefix, "_subtable_by_age.csv")))
+  readr::write_csv(by_cause_year_tbl, file.path(output_folder, paste0(prefix, "_subtable_by_cause_year.csv")))
+}
+
+write_subtables(df_hiv, "05.HIV")
+write_subtables(df_sud, "05.SUD")
+
+cat("Separate HIV and SUD subtables saved in:", output_folder, "\n")
 

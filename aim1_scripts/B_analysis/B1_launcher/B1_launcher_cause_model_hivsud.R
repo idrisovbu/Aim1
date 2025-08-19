@@ -1,5 +1,6 @@
 ##----------------------------------------------------------------
 ## Title: B1_launcher_cause_model_hivsud.R  (by-cause array)
+## Notes: This script only launches the HIV and SUD causes, used by it's own worker script
 ##----------------------------------------------------------------
 
 rm(list = ls())
@@ -57,11 +58,16 @@ fwrite(df_params, fp_parameters)
 ##----------------------------------------------------------------
 user        <- Sys.info()[["user"]]
 script_path <- file.path(h, "repo/Aim1/aim1_scripts/B_analysis/B2_worker/B2_worker_cause_model_hivsud.R")
-log_dir     <- file.path(l, "LU_CMS/DEX/hivsud/aim1/B_analysis/logs")
+
+
+# Create log directory with date subfolder
+log_date <- format(Sys.Date(), "%Y%m%d")   # e.g., "20250818"
+log_dir  <- file.path(l, "LU_CMS/DEX/hivsud/aim1/B_analysis/logs", log_date)
 dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
 
-bootstrap_iterations_F2T <- 25
-bootstrap_iterations_RX  <- 15 
+
+bootstrap_iterations_F2T <- 5
+bootstrap_iterations_RX  <- 5 
 
 #### was running 1 hour with these specs. 
 
