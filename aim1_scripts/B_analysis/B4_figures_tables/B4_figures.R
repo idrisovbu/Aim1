@@ -1,12 +1,16 @@
-######################################
+############################################################################
 # Title: B4_figures.R
 # Description: Generates plots from the master table .csv file & from subtable csv files.
 # Inputs: 05.Aggregation_Summary/bested/*.csv
 # Outputs: 06.Figures/<date>/*.png
-######################################
+############################################################################
 
+##########################################################################
+# 0. Setup environment
+##########################################################################
 rm(list = ls())
 pacman::p_load(ggplot2, readr, tidyverse, viridis, scales, ggsci)
+library(viridis)
 
 # Set the current date for folder naming
 date_today <- format(Sys.time(), "%Y%m%d")
@@ -34,9 +38,9 @@ if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
 list.files(input_dir, pattern = "\\.csv$", full.names = TRUE)
 
 
-####################################
-# Functions for saving the plots 
-####################################
+##########################################################################
+# 0.1 Functions for saving the plots 
+##########################################################################
 
 save_plot <- function(ggplot_obj, ggplot_name, width = 12, height = 10, dpi = 500, path = ".") {
   
@@ -60,38 +64,13 @@ save_plot <- function(ggplot_obj, ggplot_name, width = 12, height = 10, dpi = 50
   message("Plot saved as: ", normalizePath(file_path))
 }
 
-####################################
-# 04 two-parts estimates figures analysis
-####################################
+##########################################################################
+# 1. Two-parts estimates figures analysis
+##########################################################################
 
-####################################
-# 04 loading data and prep for vis
-####################################
-
-##Table to read in Two part model
-
-# df_master <- read.csv(file = file.path(input_dir, "04.Two_Part_Estimates_inflation_adjusted_aggregated.csv"))
-# # This is the master analytic table for Aim 1 (most granular: cause, year, type of care, race, age group).
-# 
-# df_sub_age        <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_age.csv"))
-# # Each row summarizes cost and incremental cost ("delta") by cause (lvl1/lvl2), stratified by age group, across all races, years, type of care, etc.
-# 
-# df_sub_cause      <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_cause.csv"))
-# # Aggregated by disease cause (lvl1/lvl2) only, pooling across years, ages, race, and type of care. Shows overall average costs and deltas for each disease category.
-# 
-# df_sub_cause_year <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_cause_year.csv"))
-# # Summarizes cost/deltas by cause and by year, so you can see temporal trends for each disease category.
-# 
-# df_sub_race       <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_race.csv"))
-# # Summarizes cost and delta by race (and by cause lvl1/lvl2), pooling over years, age, type of care, etc.
-# 
-# # df_sub_toc        <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_toc.csv"))
-# # # Summarizes by type of care (e.g., inpatient, outpatient, Rx), and disease.
-# 
-# df_sub_year       <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_year.csv"))
-# # Aggregated by year and disease cause, pooling across age, race, and type of care.
-
-
+##########################################################################
+# 1.1 Load in By-Cause Two Part Estimate data
+##########################################################################
 
 df_master <- read.csv(file = file.path(input_dir, "04.By_cause_inflation_adjusted_aggregated_unfiltered.csv"))
 # This is the master analytic table for Aim 1 (most granular: cause, year, type of care, race, age group).
@@ -102,31 +81,26 @@ df_sub_age        <- read_csv(file.path(input_dir, "04.By_cause_subtable_by_age.
 df_sub_cause      <- read_csv(file.path(input_dir, "04.By_cause_subtable_by_cause.csv"))
 # Aggregated by disease cause (lvl1/lvl2) only, pooling across years, ages, race, and type of care. Shows overall average costs and deltas for each disease category.
 
-df_sub_cause_year <- read_csv(file.path(input_dir, "04.By_cause__subtable_by_cause_year.csv"))
+df_sub_cause_year <- read_csv(file.path(input_dir, "04.By_cause_subtable_by_cause_year.csv"))
 # Summarizes cost/deltas by cause and by year, so you can see temporal trends for each disease category.
 
 df_sub_race       <- read_csv(file.path(input_dir, "04.By_cause_subtable_by_race.csv"))
 # Summarizes cost and delta by race (and by cause lvl1/lvl2), pooling over years, age, type of care, etc.
 
-# df_sub_toc        <- read_csv(file.path(input_dir, "04.Two_Part_Estimates_subtable_by_toc.csv"))
-# # Summarizes by type of care (e.g., inpatient, outpatient, Rx), and disease.
-
 df_sub_year       <- read_csv(file.path(input_dir, "04.By_cause_subtable_by_year.csv"))
 # Aggregated by year and disease cause, pooling across age, race, and type of care.
 
 
-####################################
-# 04 figures for two par model
-####################################
+##########################################################################
+# 1.2 Create Figures
+##########################################################################
 
-####################################
-# Average cost for genereal population
-####################################
+##########################################################################
+# 1.21 Figure 1 - Average cost for general population
+##########################################################################
 
 ### change colors, and add CI
-
-library(viridis)
-p4 <- df_master %>%
+F1 <- df_master %>%
   group_by(acause_lvl2, cause_name_lvl2) %>%
   summarise(
     avg_cost_per_bene = weighted.mean(mean_cost, total_row_count, na.rm = TRUE),
@@ -144,24 +118,40 @@ p4 <- df_master %>%
   theme_minimal(base_size = 13) +
   theme(legend.position = "none")
 
-save_plot(p4, "desc_cost_by_disease_labeled_viridis")
+save_plot(F1, "F1")
 
+##########################################################################
+# 1.22 Figure 2 - Mean delta comparison by cause 
+##########################################################################
 
+# # data prep - Need to get this section working to add in the HIV + SUD combo
+# df_F2 <- df_sub_cause %>%
+#   select(acause_lvl1, cause_name_lvl1, acause_lvl2, cause_name_lvl2,
+#          mean_delta_hiv_only_only, lower_ci_delta_hiv_only_only, upper_ci_delta_hiv_only_only,
+#          mean_delta_sud_only, lower_ci_delta_sud_only, upper_ci_delta_sud_only,
+#          mean_delta_hiv_only_sud, lower_ci_delta_hiv_only_sud, upper_ci_delta_hiv_only_sud) %>%
+#   pivot_longer(
+#     cols = c(mean_delta_hiv_only_only, mean_delta_sud_only, mean_delta_hiv_only_sud,
+#              lower_ci_delta_hiv_only_only, lower_ci_delta_sud_only, lower_ci_delta_hiv_only_sud,
+#              upper_ci_delta_hiv_only_only, upper_ci_delta_sud_only, upper_ci_delta_hiv_only_sud),
+#     names_to = c("stat", "scenario"),
+#     names_pattern = "(mean|lower_ci|upper_ci)_delta_(hiv|sud|hiv_sud)",
+#     values_to = "value"
+#   ) %>%
+#   pivot_wider(
+#     names_from = stat,
+#     values_from = value
+#   )
 
-####################################
-# Mean delta comparison by casue 
-####################################
-
-#data prep
-
-df_long <- df_sub_cause %>%
+# data prep
+df_F2 <- df_sub_cause %>%
   select(acause_lvl1, cause_name_lvl1, acause_lvl2, cause_name_lvl2,
-         mean_delta_hiv, lower_ci_delta_hiv, upper_ci_delta_hiv,
-         mean_delta_sud, lower_ci_delta_sud, upper_ci_delta_sud) %>%
+         mean_delta_hiv_only_only, lower_ci_delta_hiv_only_only, upper_ci_delta_hiv_only_only,
+         mean_delta_sud_only, lower_ci_delta_sud_only, upper_ci_delta_sud_only) %>%
   pivot_longer(
-    cols = c(mean_delta_hiv, mean_delta_sud,
-             lower_ci_delta_hiv, lower_ci_delta_sud,
-             upper_ci_delta_hiv, upper_ci_delta_sud),
+    cols = c(mean_delta_hiv_only_only, mean_delta_sud_only,
+             lower_ci_delta_hiv_only_only, lower_ci_delta_sud_only,
+             upper_ci_delta_hiv_only_only, upper_ci_delta_sud_only),
     names_to = c("stat", "scenario"),
     names_pattern = "(mean|lower_ci|upper_ci)_delta_(hiv|sud)",
     values_to = "value"
@@ -171,12 +161,10 @@ df_long <- df_sub_cause %>%
     values_from = value
   )
 
+df_F2$scenario <- factor(df_F2$scenario, levels = c("hiv", "sud"), labels = c("HIV", "Substance Use"))
 
-df_long$scenario <- factor(df_long$scenario, levels = c("hiv", "sud"), labels = c("HIV", "Substance Use"))
-
-
-### plot 
-delta_plot <- ggplot(df_long, aes(x = mean, y = reorder(cause_name_lvl2, mean), fill = scenario)) +
+# plot 
+F2 <- ggplot(df_F2, aes(x = mean, y = reorder(cause_name_lvl2, mean), fill = scenario)) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.8), width = 0.7) +
   geom_errorbar(
     aes(xmin = lower_ci, xmax = upper_ci),
@@ -204,22 +192,22 @@ delta_plot <- ggplot(df_long, aes(x = mean, y = reorder(cause_name_lvl2, mean), 
     plot.title = element_text(hjust = 0.5)
   )
 
-save_plot(delta_plot, "mean_delta_comparison")
+save_plot(F2, "F2")
 
 
+##########################################################################
+# 1.23 Figure 3 - Mean delta by comorbidity, facet by race
+##########################################################################
 
-#########################################
-# Mean delta by comorbidity, facet by race
-#########################################
 #data prep
-df_long_race <- df_sub_race %>%
+df_F3 <- df_sub_race %>%
   select(acause_lvl1, cause_name_lvl1, acause_lvl2, cause_name_lvl2, race_cd,
-         mean_delta_hiv, lower_ci_delta_hiv, upper_ci_delta_hiv,
-         mean_delta_sud, lower_ci_delta_sud, upper_ci_delta_sud) %>%
+         mean_delta_hiv_only_only, lower_ci_delta_hiv_only_only, upper_ci_delta_hiv_only_only,
+         mean_delta_sud_only, lower_ci_delta_sud_only, upper_ci_delta_sud_only) %>%
   pivot_longer(
-    cols = c(mean_delta_hiv, mean_delta_sud,
-             lower_ci_delta_hiv, lower_ci_delta_sud,
-             upper_ci_delta_hiv, upper_ci_delta_sud),
+    cols = c(mean_delta_hiv_only_only, mean_delta_sud_only,
+             lower_ci_delta_hiv_only_only, lower_ci_delta_sud_only,
+             upper_ci_delta_hiv_only_only, upper_ci_delta_sud_only),
     names_to = c("stat", "scenario"),
     names_pattern = "(mean|lower_ci|upper_ci)_delta_(hiv|sud)",
     values_to = "value"
@@ -229,7 +217,7 @@ df_long_race <- df_sub_race %>%
     values_from = value
   )
 
-df_long_race$scenario <- factor(df_long_race$scenario, 
+df_F3$scenario <- factor(df_F3$scenario, 
                                 levels = c("hiv", "sud"), 
                                 labels = c("HIV", "SUD"))
 labs(
@@ -240,13 +228,11 @@ labs(
   fill = "Race"
 )
 
-
-
 ## plot
 ### need to do top 15 only 
 
-delta_plot_race2 <- ggplot(
-  df_long_race, 
+F3 <- ggplot(
+  df_F3, 
   aes(x = mean, y = reorder(cause_name_lvl2, mean), fill = race_cd)
 ) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.8), width = 0.7) +
@@ -276,27 +262,23 @@ delta_plot_race2 <- ggplot(
   ) +
   facet_wrap(~scenario)
 
-save_plot(delta_plot_race2, "mean_delta_by_comorb_race")
+save_plot(F3, "F3")
 
-
-
-
-####################################
-# Delta HIV over time all race
-####################################
-
+##########################################################################
+# 1.24 Figure 4 - Delta HIV over time all race
+##########################################################################
 colnames(df_master)
 
 df_ribbon <- df_master %>%
   group_by(year_id, race_cd) %>%
   summarise(
-    mean_delta = weighted.mean(mean_delta_hiv, total_row_count, na.rm = TRUE),
-    lower_ci = weighted.mean(lower_ci_delta_hiv, total_row_count, na.rm = TRUE),
-    upper_ci = weighted.mean(upper_ci_delta_hiv, total_row_count, na.rm = TRUE),
+    mean_delta = weighted.mean(mean_delta_hiv_only, total_row_count, na.rm = TRUE),
+    lower_ci = weighted.mean(lower_ci_delta_hiv_only, total_row_count, na.rm = TRUE),
+    upper_ci = weighted.mean(upper_ci_delta_hiv_only, total_row_count, na.rm = TRUE),
     .groups = "drop"
   )
 
-plot_model_delta_cost_by_year_race_cd <- ggplot(
+F4 <- ggplot(
   df_ribbon,
   aes(x = as.integer(year_id), y = mean_delta, color = race_cd, group = race_cd, fill = race_cd)
 ) +
@@ -308,7 +290,7 @@ plot_model_delta_cost_by_year_race_cd <- ggplot(
   scale_x_continuous(breaks = unique(df_ribbon$year_id)) +
   scale_y_continuous(labels = scales::dollar_format()) +
   labs(
-    title = "Cost Delta by Race Over Time (All Races, All Ages)",
+    title = "Cost Delta by Race Over Time (All Ages)",
     subtitle = "Weighted difference in cost (HIV+ vs HIV−); 95% CI; 2019 USD",
     x = "Year", y = "Mean Cost Delta (USD)",
     color = "Race", fill = "Race"
@@ -316,18 +298,18 @@ plot_model_delta_cost_by_year_race_cd <- ggplot(
   theme_minimal(base_size = 14) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-save_plot(plot_model_delta_cost_by_year_race_cd, "model_delta_cost_by_year_race_cd_all_races")
+save_plot(F4, "F4")
 
-####################################
-# HIV delta_cost_by_year_race_cd_facet_race
-####################################
+##########################################################################
+# 1.25 Figure 5 - HIV delta_cost_by_year_race_cd_facet_race
+##########################################################################
 
-plot7_modeled_delta_by_age_group_years_start_and_race_facet <- df_master %>%
+F5 <- df_master %>%
   group_by(year_id, age_group_years_start, race_cd) %>%
   summarise(
-    mean_delta = weighted.mean(mean_delta_hiv, total_row_count, na.rm = TRUE),
-    lower_ci = weighted.mean(lower_ci_delta_hiv, total_row_count, na.rm = TRUE),
-    upper_ci = weighted.mean(upper_ci_delta_hiv, total_row_count, na.rm = TRUE),
+    mean_delta = weighted.mean(mean_delta_hiv_only, total_row_count, na.rm = TRUE),
+    lower_ci = weighted.mean(lower_ci_delta_hiv_only, total_row_count, na.rm = TRUE),
+    upper_ci = weighted.mean(upper_ci_delta_hiv_only, total_row_count, na.rm = TRUE),
     .groups = "drop"
   ) %>%
   mutate(age_group_years_start = factor(age_group_years_start)) %>%  # convert to discrete
@@ -352,13 +334,12 @@ plot7_modeled_delta_by_age_group_years_start_and_race_facet <- df_master %>%
   theme_minimal(base_size = 13) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-save_plot(plot7_modeled_delta_by_age_group_years_start_and_race_facet, 
-          "model_delta_cost_by_year_age_group_years_start_facet_race")
+save_plot(F5, "F5")
 
-####################################
-# Delta MSUD over time all race_cd
-####################################
 
+##########################################################################
+# 1.26 Figure 6 - Delta MSUD over time all race_cd
+##########################################################################
 df_ribbon_msud <- df_master %>%
   group_by(year_id, race_cd) %>%
   summarise(
@@ -368,7 +349,7 @@ df_ribbon_msud <- df_master %>%
     .groups = "drop"
   )
 
-plot_model_delta_cost_by_year_race_cd_msud <- ggplot(
+F6 <- ggplot(
   df_ribbon_msud,
   aes(x = as.integer(year_id), y = mean_delta, color = race_cd, group = race_cd, fill = race_cd)
 ) +
@@ -388,16 +369,12 @@ plot_model_delta_cost_by_year_race_cd_msud <- ggplot(
   theme_minimal(base_size = 14) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-save_plot(plot_model_delta_cost_by_year_race_cd_msud, "model_delta_cost_by_year_race_cd_all_races_msud")
+save_plot(F6, "F6")
 
-
-
-#######
-
-
-#####
-
-plot7_modeled_delta_by_age_group_years_start_and_race_facet_msud <- df_master %>%
+##########################################################################
+# 1.27 Figure 7 - Cost Delta by Age and Race Over Time (SUD)
+##########################################################################
+F7 <- df_master %>%
   group_by(year_id, age_group_years_start, race_cd) %>%
   summarise(
     mean_delta = weighted.mean(mean_delta_sud, total_row_count, na.rm = TRUE),
@@ -431,69 +408,19 @@ plot7_modeled_delta_by_age_group_years_start_and_race_facet_msud <- df_master %>
   theme_minimal(base_size = 13) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-save_plot(plot7_modeled_delta_by_age_group_years_start_and_race_facet_msud, 
-          "model_delta_cost_by_year_age_group_years_start_facet_race_msud22")
+save_plot(F7, "F7")
 
 
-# summary(df_master)
-# 
-# plot1_modeled <- df_master %>%
-#   group_by(year_id, toc) %>%
-#   summarise(
-#     delta = weighted.mean(mean_delta_hiv, total_row_count, na.rm = TRUE),
-#     lower = weighted.mean(lower_ci_delta_hiv, total_row_count, na.rm = TRUE),
-#     upper = weighted.mean(upper_ci_delta_hiv, total_row_count, na.rm = TRUE),
-#     .groups = "drop"
-#   ) %>%
-#   ggplot(aes(x = as.integer(year_id), y = delta, color = toc, group = toc)) +
-#   geom_line(size = 1.2) +
-#   geom_point(size = 2) +
-#   geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) +
-#   scale_color_jama() +
-#   scale_x_continuous(breaks = seq(2008, 2019, 1)) +
-#   labs(
-#     title = "Delta Cost (HIV+ vs HIV−) by Year and Type of Care",
-#     x = "Year", y = "Delta Cost (USD)", color = "Type of Care"
-#   ) +
-#   theme_minimal(base_size = 13)
-# 
-# save_plot(plot1_modeled, "model_delta_cost_by_year_toc")
+##########################################################################
+# 1.28 Figure 8 - Modeled Incremental Cost (HIV+ vs HIV−) by Year, Race, and Age
+##########################################################################
 
-
-###
-
-# plot3_modeled <- df_master %>%
-#   group_by(age_group_years_start, race_cd) %>%
-#   summarise(
-#     delta = weighted.mean(mean_delta_hiv, total_row_count, na.rm = TRUE),
-#     lower = weighted.mean(lower_ci_delta_hiv, total_row_count, na.rm = TRUE),
-#     upper = weighted.mean(upper_ci_delta_hiv, total_row_count, na.rm = TRUE),
-#     .groups = "drop"
-#   ) %>%
-#   ggplot(aes(x = factor(age_group_years_start), y = delta, color = race_cd, group = race_cd)) +
-#   geom_line(size = 1.1) +
-#   geom_point(size = 2) +
-#   geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.3) +
-#   scale_color_jama() +
-#   labs(
-#     title = "Modeled Delta Cost (HIV+ vs HIV−) by Age Group and Race",
-#     x = "Age Group", y = "Delta Cost (USD)", color = "Race"
-#   ) +
-#   theme_minimal(base_size = 13)
-# 
-# save_plot(plot3_modeled, "model_delta_cost_by_age_and_race")
-
-
-
-
-########
-
-plot4_modeled <- df_master %>%
+F8 <- df_master %>%
   group_by(year_id, race_cd, age_group_years_start) %>%
   summarise(
-    delta = weighted.mean(mean_delta_hiv, total_row_count, na.rm = TRUE),
-    lower = weighted.mean(lower_ci_delta_hiv, total_row_count, na.rm = TRUE),
-    upper = weighted.mean(upper_ci_delta_hiv, total_row_count, na.rm = TRUE),
+    delta = weighted.mean(mean_delta_hiv_only, total_row_count, na.rm = TRUE),
+    lower = weighted.mean(lower_ci_delta_hiv_only, total_row_count, na.rm = TRUE),
+    upper = weighted.mean(upper_ci_delta_hiv_only, total_row_count, na.rm = TRUE),
     .groups = "drop"
   ) %>%
   ggplot(aes(x = factor(year_id), y = delta, color = race_cd, group = race_cd)) +
@@ -511,18 +438,12 @@ plot4_modeled <- df_master %>%
   theme_minimal(base_size = 13) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-save_plot(plot4_modeled, "model_delta_cost_by_year_race_facet_age_group_years_start")
+save_plot(F8, "F8")
 
 
-
-
-
-
-
-####################################
-# Carpet plots 
-####################################
-
+##########################################################################
+# 1.29 Figure 9 - Carpet Plot - Percent of HIV-Attributable Spending per Disease, by Race
+##########################################################################
 hiv_percent_race <- ggplot(
   data = df_sub_race %>%
     group_by(cause_name_lvl2) %>%
@@ -554,7 +475,9 @@ hiv_percent_race <- ggplot(
 # Output
 save_plot(hiv_percent_race, "hiv_percent_race")
 
-
+##########################################################################
+# 1.3 Figure 10 - Carpet Plot - Percent of Spending per Beneficiary, HIV, by Age Group
+##########################################################################
 hiv_percent_age <- ggplot(
   data = df_sub_age %>%
     group_by(cause_name_lvl2) %>%
@@ -586,9 +509,9 @@ hiv_percent_age <- ggplot(
 # Output
 save_plot(hiv_percent_age, "hiv_percent_age")
 
-
-library(viridis)
-
+##########################################################################
+# 1.31 Figure 11 - Average Cost per Beneficiary Over Time by Disease Category (with CI)
+##########################################################################
 plot_mean_cost_by_disease_over_time <- df_master %>%
   group_by(year_id, cause_name_lvl2) %>%
   summarise(
@@ -613,7 +536,4 @@ plot_mean_cost_by_disease_over_time <- df_master %>%
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 save_plot(plot_mean_cost_by_disease_over_time, "mean_cost_over_time_by_disease_ribbons_viridis")
-
-
-
 
