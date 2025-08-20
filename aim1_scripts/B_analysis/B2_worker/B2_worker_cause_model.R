@@ -308,11 +308,33 @@ if (nrow(df_cause) == 0L) {
       delta_hiv_sud  = cost_hiv_sud  - cost_neither,
       bootstrap_iter = b
     )]
+
+    # Size checking
+    cols_to_check <- c("cost_neither", "cost_sud_only", "cost_hiv_only", "cost_hiv_sud")
+    skip_to_next <- FALSE
     
-    # Check when cost_hiv_only is tiny,  skip iteration if values are insignificant
-    if (any(out_b$cost_hiv_only < 1, na.rm = TRUE)) {
-      print("Found values of cost_hiv_only < 1.")
-      print(paste0("Skipping Bootstrap iteration: ", b))
+    # Check when columns have enormous values
+    for (col in cols_to_check) {
+      if (any(out_b[[col]] < 1, na.rm = TRUE)) {
+        message("Found values of ", col, " < 1.")
+        message("Skipping Bootstrap iteration: ", b)
+        skip_to_next <- TRUE
+        break # jumps to the next bootstrap iteration
+      }
+    }
+    
+    # Check when columns have enormous values
+    for (col in cols_to_check) {
+      if (any(out_b[[col]] > 1000000, na.rm = TRUE)) {
+        message("Found values of ", col, " > 1,000,000.")
+        message("Skipping Bootstrap iteration: ", b)
+        skip_to_next <- TRUE
+        break  # jumps to the next bootstrap iteration
+      }
+    }
+    
+    # Skip to next iteration
+    if (skip_to_next) {
       next
     }
     

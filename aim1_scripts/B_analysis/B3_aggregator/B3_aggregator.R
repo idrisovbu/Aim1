@@ -47,12 +47,12 @@ ensure_dir_exists <- function(dir_path) {
 }
 
 # Define input directory 
-date_of_input <- "bested" # bested from 20250731
+date_of_input <- "20250820" # bested from 20250731
 base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis"
 input_summary_stats <- file.path(base_dir, "01.Summary_Statistics", date_of_input)
 input_regression_estimates <- file.path(base_dir, "02.Regression_Estimates", date_of_input)
 input_meta_stats <- file.path(base_dir, "03.Meta_Statistics", date_of_input) 
-input_by_cause <- file.path(base_dir, "04.Two_Part_Estimates", date_of_input, "results")
+input_by_cause <- file.path(base_dir, "04.Two_Part_Estimates", date_of_input, "by_cause/results")
 
 # Define output directory
 date_of_output <- format(Sys.time(), "%Y%m%d")

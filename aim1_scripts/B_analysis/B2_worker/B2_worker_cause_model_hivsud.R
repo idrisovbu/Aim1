@@ -79,11 +79,11 @@ if (Sys.info()["sysname"] == 'Linux'){
 ## 0) Read args / data
 ##---------------------------
 if (interactive()) {
-  date_or_bested <- "20250820" # set to "bested" if using bested folder, otherwise set date
-  path <- paste0("/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/", date_or_bested, "/aggregated_by_year/compiled_F2T_data_2010_age85.parquet")
+  date_or_bested <- "bested" # set to "bested" if using bested folder, otherwise set date
+  path <- paste0("/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/", date_or_bested, "/aggregated_by_year/compiled_RX_data_2010_age75.parquet")
   df <- open_dataset(path) %>% collect() %>% as.data.table()
   year_id <- df$year_id[1]
-  file_type <- "F2T"
+  file_type <- "RX"
   age_group_years_start <- df$age_group_years_start[1]
   bootstrap_iterations_F2T <- 15
   bootstrap_iterations_RX  <- 1
@@ -334,10 +334,32 @@ for (b in seq_len(B)) {
       bootstrap_iter = b
     )]
     
-    # Check when cost_hiv_only is tiny,  skip iteration if values are insignificant
-    if (any(out_b$cost_hiv_only < 1, na.rm = TRUE)) {
-      print("Found values of cost_hiv_only < 1.")
-      print(paste0("Skipping Bootstrap iteration: ", b))
+    # Size checking
+    cols_to_check <- c("cost_sud_only", "cost_hiv_only", "cost_hiv_sud")
+    skip_to_next <- FALSE
+    
+    # Check when columns have enormous values
+    for (col in cols_to_check) {
+      if (any(out_b[[col]] < 1, na.rm = TRUE)) {
+        message("Found values of ", col, " < 1.")
+        message("Skipping Bootstrap iteration: ", b)
+        skip_to_next <- TRUE
+        break # jumps to the next bootstrap iteration
+      }
+    }
+    
+    # Check when columns have enormous values
+    for (col in cols_to_check) {
+      if (any(out_b[[col]] > 1000000, na.rm = TRUE)) {
+        message("Found values of ", col, " > 1,000,000.")
+        message("Skipping Bootstrap iteration: ", b)
+        skip_to_next <- TRUE
+        break  # jumps to the next bootstrap iteration
+      }
+    }
+    
+    # Skip to next iteration
+    if (skip_to_next) {
       next
     }
     
@@ -462,10 +484,32 @@ for (b in seq_len(B)) {
       bootstrap_iter = b
     )]
     
-    # Check when cost_sud_only is tiny, skip iteration if values are insignificant
-    if (any(out_b$cost_sud_only < 1, na.rm = TRUE)) {
-      print("Found values of cost_sud_only < 1.")
-      print(paste0("Skipping Bootstrap iteration: ", b))
+    # Size checking
+    cols_to_check <- c("cost_sud_only", "cost_hiv_only", "cost_hiv_sud")
+    skip_to_next <- FALSE
+    
+    # Check when columns have enormous values
+    for (col in cols_to_check) {
+      if (any(out_b[[col]] < 1, na.rm = TRUE)) {
+        message("Found values of ", col, " < 1.")
+        message("Skipping Bootstrap iteration: ", b)
+        skip_to_next <- TRUE
+        break # jumps to the next bootstrap iteration
+      }
+    }
+    
+    # Check when columns have enormous values
+    for (col in cols_to_check) {
+      if (any(out_b[[col]] > 1000000, na.rm = TRUE)) {
+        message("Found values of ", col, " > 1,000,000.")
+        message("Skipping Bootstrap iteration: ", b)
+        skip_to_next <- TRUE
+        break  # jumps to the next bootstrap iteration
+      }
+    }
+    
+    # Skip to next iteration
+    if (skip_to_next) {
       next
     }
     
