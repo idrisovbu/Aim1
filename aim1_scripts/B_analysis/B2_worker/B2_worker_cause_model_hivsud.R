@@ -50,7 +50,7 @@
 
 # Clear environment and set library paths
 rm(list = ls())
-pacman::p_load(arrow, dplyr, openxlsx, RMySQL, data.table, ini, DBI, tidyr, openxlsx,glmnet)
+pacman::p_load(arrow, dplyr, openxlsx, RMySQL, data.table, ini, DBI, tidyr, openxlsx,glmnet, broom)
 library(lbd.loader, lib.loc = sprintf("/share/geospatial/code/geospatial-libraries/lbd.loader-%s", R.version$major))
 if("dex.dbr"%in% (.packages())) detach("package:dex.dbr", unload=TRUE)
 library(dex.dbr, lib.loc = lbd.loader::pkg_loc("dex.dbr"))
@@ -79,14 +79,15 @@ if (Sys.info()["sysname"] == 'Linux'){
 ## 0) Read args / data
 ##---------------------------
 if (interactive()) {
-  path <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/bested/aggregated_by_year/compiled_F2T_data_2019_age80.parquet"
+  date_or_bested <- "20250820" # set to "bested" if using bested folder, otherwise set date
+  path <- paste0("/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/", date_or_bested, "/aggregated_by_year/compiled_F2T_data_2010_age85.parquet")
   df <- open_dataset(path) %>% collect() %>% as.data.table()
-  year_id <- 2010
+  year_id <- df$year_id[1]
   file_type <- "F2T"
   age_group_years_start <- df$age_group_years_start[1]
-  bootstrap_iterations_F2T <- 2
+  bootstrap_iterations_F2T <- 15
   bootstrap_iterations_RX  <- 1
-  cause_name <- "_subs"            # <— set a single cause for local testing
+  cause_name <- "hiv"            # <— set a single cause for local testing
   
   fp_input <- path # sets this for message output if needed
 } else {
@@ -243,7 +244,17 @@ set.seed(123)
 kept_iters <- 0L
 for (b in seq_len(B)) {
   cat("[", cause_name, "] Bootstrap iteration:", b, "/", B, "\n", sep = "")
-  df_boot <- df_cause[sample(.N, replace = TRUE)]
+  
+  # Perform sampling
+
+  # Choose stratification keys (may need to change how we decide boot strapped stratification)
+  by_keys <- c("sex_id", "has_hiv", "has_sud")
+
+  # One stratified resample (size-preserving within each stratum)
+  df_boot <- df_cause[, .SD[sample(.N, .N, replace = TRUE)], by = by_keys]
+  
+  # Old method of sampling, testing new method above
+  #df_boot <- df_cause[sample(.N, replace = TRUE)]
   
   # Stable factor levels
   df_boot[, `:=`(
@@ -322,6 +333,13 @@ for (b in seq_len(B)) {
       delta_sud_only = cost_hiv_sud - cost_hiv_only,
       bootstrap_iter = b
     )]
+    
+    # Check when cost_hiv_only is tiny,  skip iteration if values are insignificant
+    if (any(out_b$cost_hiv_only < 1, na.rm = TRUE)) {
+      print("Found values of cost_hiv_only < 1.")
+      print(paste0("Skipping Bootstrap iteration: ", b))
+      next
+    }
     
     ##----------------------------------------------------------------
     ## Write parquet file with bootstrapped results
@@ -443,6 +461,13 @@ for (b in seq_len(B)) {
       delta_hiv_only = cost_hiv_sud - cost_sud_only,
       bootstrap_iter = b
     )]
+    
+    # Check when cost_sud_only is tiny, skip iteration if values are insignificant
+    if (any(out_b$cost_sud_only < 1, na.rm = TRUE)) {
+      print("Found values of cost_sud_only < 1.")
+      print(paste0("Skipping Bootstrap iteration: ", b))
+      next
+    }
     
     ##----------------------------------------------------------------
     ## Write parquet file with bootstrapped results

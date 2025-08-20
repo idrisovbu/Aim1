@@ -221,7 +221,17 @@ if (nrow(df_cause) == 0L) {
   kept_iters <- 0L
   for (b in seq_len(B)) {
     cat("[", cause_name, "] Bootstrap iteration:", b, "/", B, "\n", sep = "")
-    df_boot <- df_cause[sample(.N, replace = TRUE)]
+    
+    # Perform sampling
+    
+    # Choose stratification keys (may need to change how we decide boot strapped stratification)
+    by_keys <- c("sex_id", "has_hiv", "has_sud")
+    
+    # One stratified resample (size-preserving within each stratum)
+    df_boot <- df_cause[, .SD[sample(.N, .N, replace = TRUE)], by = by_keys]
+    
+    # Old method of sampling, testing new method above
+    #df_boot <- df_cause[sample(.N, replace = TRUE)]
     
     # Stable factor levels
     df_boot[, `:=`(
@@ -298,6 +308,13 @@ if (nrow(df_cause) == 0L) {
       delta_hiv_sud  = cost_hiv_sud  - cost_neither,
       bootstrap_iter = b
     )]
+    
+    # Check when cost_hiv_only is tiny,  skip iteration if values are insignificant
+    if (any(out_b$cost_hiv_only < 1, na.rm = TRUE)) {
+      print("Found values of cost_hiv_only < 1.")
+      print(paste0("Skipping Bootstrap iteration: ", b))
+      next
+    }
     
     ##----------------------------------------------------------------
     ## Write parquet file with bootstrapped results
