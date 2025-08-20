@@ -1081,3 +1081,67 @@ colnames(df_tpe_t7) <- converted_names
 fwrite(df_tpe_t7, file.path(output_tables_dir, "TPE_T7.csv"))
 
 
+##----------------------------------------------------------------
+## 2.12 TPE_T8 - HIV / SUD all races all age groups combined, by year table
+##
+## This table uses the By-cause two part estimates
+##----------------------------------------------------------------
+
+# Set df
+df_tpe_t8_hiv <- data_list$`05.HIV_subtable_by_year` %>%
+  select(c("cause_name_lvl2", 
+           "year_id", "mean_cost_hiv", "lower_ci_hiv", "upper_ci_hiv", "mean_cost_hiv_sud", 
+           "lower_ci_hiv_sud", "upper_ci_hiv_sud"))
+df_tpe_t8_sud <- data_list$`05.SUD_subtable_by_year` %>%
+  select(c("cause_name_lvl2", 
+           "year_id", "mean_cost_sud", "lower_ci_sud", "upper_ci_sud", "mean_cost_hiv_sud", 
+           "lower_ci_hiv_sud", "upper_ci_hiv_sud"))
+
+# Covert to dollar amounts
+for (col in colnames(df_tpe_t8_hiv)) {
+  if (col == "cause_name_lvl2" | col == "year_id" | col == "total_bin_count") {
+    next
+  } else {
+    df_tpe_t8_hiv[[col]] <- dollar(df_tpe_t8_hiv[[col]])
+  }
+}
+for (col in colnames(df_tpe_t8_sud)) {
+  if (col == "cause_name_lvl2" | col == "year_id" | col == "total_bin_count") {
+    next
+  } else {
+    df_tpe_t8_sud[[col]] <- dollar(df_tpe_t8_sud[[col]])
+  }
+}
+
+# Create mean + CI columns
+df_tpe_t8_hiv <- df_tpe_t8_hiv %>%
+  mutate(
+    `HIV - Mean Cost CI` = paste0(mean_cost_hiv, " (", lower_ci_hiv, " - ", upper_ci_hiv, ")"),
+    `HIV + SUD Mean Cost CI` = paste0(mean_cost_hiv_sud, " (", lower_ci_hiv_sud, " - ", upper_ci_hiv_sud, ")")
+  ) %>%
+  select(c("year_id", "HIV - Mean Cost CI", "HIV + SUD Mean Cost CI")) %>% 
+  setnames(old = c("year_id"),
+           new = c("Year"))
+
+df_tpe_t8_sud <- df_tpe_t8_sud %>%
+  mutate(
+    `SUD - Mean Cost CI` = paste0(mean_cost_sud, " (", lower_ci_sud, " - ", upper_ci_sud, ")"),
+    `SUD + HIV Mean Cost CI` = paste0(mean_cost_hiv_sud, " (", lower_ci_hiv_sud, " - ", upper_ci_hiv_sud, ")")
+  ) %>%
+  select(c("year_id", "SUD - Mean Cost CI", "SUD + HIV Mean Cost CI")) %>% 
+  setnames(old = c("year_id"),
+           new = c("Year"))
+
+# Combine dfs - Join on "Year" 
+df_tpe_t8 <- full_join(x = df_tpe_t8_hiv, y = df_tpe_t8_sud, by = c("Year"))
+
+# Save and output able as .csv
+fwrite(df_tpe_t8, file.path(output_tables_dir, "TPE_T8.csv"))
+
+
+
+
+
+
+
+
