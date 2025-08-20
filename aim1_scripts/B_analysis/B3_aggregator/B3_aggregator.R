@@ -415,11 +415,11 @@ df_input_by_cause <- rbindlist(
   #,idcol = "source_file" # uncomment this if you want to add the file number
 )
 
-# Checking why there are NA values in certain rows / columns
+# # Checking why there are NA values in certain rows / columns
 # DT <- df_input_by_cause[!complete.cases(df_input_by_cause)]
 # 
 # View(df_input_by_cause[apply(is.na(df_input_by_cause), 1, any)])
-# df_nas <- df_input_by_cause[apply(is.na(df_input_by_cause), 1, any)] 
+# df_nas <- df_input_by_cause[apply(is.na(df_input_by_cause), 1, any)]
 # write.csv(df_nas, file = file.path(base_dir, "df_nas.csv"))
 
 # extra safety: if a few rows slipped in, drop them by content

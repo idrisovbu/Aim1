@@ -112,7 +112,7 @@ hepc_benes <- unique(df[acause == "hepatitis_c", .(bene_id)][, has_hepc := 1L])
 ##----------------------------------------------------------------
 ## 2. Filter to primary cause only
 ##----------------------------------------------------------------
-df <- df[primary_cause == 1]
+# df <- df[primary_cause == 1] # Testing keeping all causes instead of just primary
 ##----------------------------------------------------------------
 ## 3a. Join flags back in
 ##----------------------------------------------------------------

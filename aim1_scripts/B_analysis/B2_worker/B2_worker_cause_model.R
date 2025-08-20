@@ -50,7 +50,7 @@
 
 # Clear environment and set library paths
 rm(list = ls())
-pacman::p_load(arrow, dplyr, openxlsx, RMySQL, data.table, ini, DBI, tidyr, openxlsx,glmnet)
+pacman::p_load(arrow, dplyr, openxlsx, RMySQL, data.table, ini, DBI, tidyr, openxlsx,glmnet, broom)
 library(lbd.loader, lib.loc = sprintf("/share/geospatial/code/geospatial-libraries/lbd.loader-%s", R.version$major))
 if("dex.dbr"%in% (.packages())) detach("package:dex.dbr", unload=TRUE)
 library(dex.dbr, lib.loc = lbd.loader::pkg_loc("dex.dbr"))
@@ -129,11 +129,13 @@ by_cause_root          <- file.path(output_folder, "by_cause")
 # boot_chunks is by cause, year, then age group (e.g. boot_chunks/_enteric_all/2015/65/chunk1.parquet)
 by_cause_boot_parent   <- file.path(by_cause_root, "boot_chunks")
 by_cause_results_parent<- file.path(by_cause_root, "results")
+by_cause_regression_coefficients <- file.path(by_cause_root, "regression_coefficients")
 
 ensure_dir_exists(output_folder)
 ensure_dir_exists(by_cause_root)
 ensure_dir_exists(by_cause_boot_parent)
 ensure_dir_exists(by_cause_results_parent)
+ensure_dir_exists(by_cause_regression_coefficients)
 
 slugify <- function(x) {
   x <- gsub("\\s+", "_", x, perl = TRUE)
@@ -143,14 +145,29 @@ slugify <- function(x) {
 make_cause_dirs <- function(cause_name) {
   cause_slug <- slugify(cause_name)
   boot_dir   <- file.path(by_cause_boot_parent,    cause_slug, year_id, age_group_years_start)
+  regression_coefficients_dir   <- file.path(by_cause_regression_coefficients,    cause_slug, year_id, age_group_years_start)
   res_dir    <- file.path(by_cause_results_parent, cause_slug)
   ensure_dir_exists(boot_dir)
   ensure_dir_exists(res_dir)
+  ensure_dir_exists(regression_coefficients_dir)
   list(
     cause_slug  = cause_slug,
     boot_dir    = boot_dir,
-    results_dir = res_dir
+    results_dir = res_dir,
+    regression_dir = regression_coefficients_dir
   )
+}
+
+# Extract coefficients and p-values (used to save regression outputs)
+extract_all_coefs <- function(model, suffix) {
+  tidy(model) %>%
+    filter(term != "(Intercept)") %>%
+    rename(
+      variable = term,
+      !!paste0("estimate_", suffix) := estimate,
+      !!paste0("p_", suffix) := p.value
+    ) %>%
+    select(variable, starts_with("estimate_"), starts_with("p_"))
 }
 
 ##---------------------------
@@ -171,6 +188,7 @@ cat("\n=== Running cause:", cause_name, "===\n")
 paths <- make_cause_dirs(cause_name)
 bootstrap_chunks_output_folder <- paths$boot_dir
 results_output_folder          <- paths$results_dir
+regression_coefficients_output_folder          <- paths$regression_dir
 
 # Clean old chunks (parquet only)
 old_files <- list.files(bootstrap_chunks_output_folder, pattern = "\\.parquet$", full.names = TRUE)
@@ -281,7 +299,9 @@ if (nrow(df_cause) == 0L) {
       bootstrap_iter = b
     )]
     
-    # Atomic parquet write
+    ##----------------------------------------------------------------
+    ## Write parquet file with bootstrapped results
+    ##----------------------------------------------------------------
     final_fp <- file.path(bootstrap_chunks_output_folder, sprintf("bootstrap_iter_%03d.parquet", b))
     tmp_fp   <- paste0(final_fp, ".tmp")
     ok <- FALSE
@@ -298,6 +318,35 @@ if (nrow(df_cause) == 0L) {
       next
     }
     
+    ##----------------------------------------------------------------
+    ## Save regression coefficients
+    ##----------------------------------------------------------------
+    logit_df <- extract_all_coefs(mod_logit, "logit")
+    gamma_df <- extract_all_coefs(mod_gamma, "gamma")
+    
+    # Merge and annotate regression coefficients
+    regression_results <- full_join(logit_df, gamma_df, by = "variable") %>%
+      mutate(
+        interaction_dropped = if_else(is.na(estimate_gamma) & str_detect(variable, ":"), TRUE, FALSE),
+        year_id = year_id,
+        file_type = file_type,
+        age_group_years_start = age_group_years_start
+      ) %>%
+      select(variable, estimate_logit, p_logit, estimate_gamma, p_gamma,
+             interaction_dropped, year_id, file_type, age_group_years_start)
+    
+    # label bootstrap value column
+    regression_results$bootstrap_number <- b
+    regression_results$cause_name <- cause_name
+    
+    # Save regression coefficients
+    file_out_regression <- generate_filename("regression_results", ".csv")
+    file_out_regression <- sub("\\.csv$", paste0("_bootstrap#", b, ".csv"), file_out_regression)
+    out_path_regression <- file.path(regression_coefficients_output_folder, file_out_regression)
+    write_csv(regression_results, out_path_regression)
+    cat("✅ Regression coefficients saved to:", out_path_regression, "\n")
+    
+    # Add +1 to iterations count
     kept_iters <- kept_iters + 1L
   }
   

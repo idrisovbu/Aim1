@@ -114,11 +114,11 @@ jid <- SUBMIT_ARRAY_JOB(
   args = c(fp_parameters), # Path to CSV with parameters
   error_dir = log_dir,
   output_dir = log_dir,
-  queue = "long.q",
+  queue = "all.q",
   n_jobs = length(unique(df_list_input_data_subset$year_id)),
   memory = "250G", 
   threads = 1, 
-  time = "2:00:00", 
+  time = "4:00:00", 
   user_email = paste0(user, "@uw.edu"),
   archive = FALSE,
   test = F # F = Full Run, T = Test Run (only run the first job in a batch)
