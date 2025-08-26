@@ -87,7 +87,7 @@ jid <- SUBMIT_ARRAY_JOB(
   time       = "01:00:00",    # adjust per dataset size/boots
   user_email = paste0(user, "@uw.edu"),
   archive    = FALSE,
-  test       = F
+  test       = T
 )
 
 cat("Submitted", nrow(df_params), "array tasks.\n")

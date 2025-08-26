@@ -536,83 +536,61 @@ df_ss_t3 <- rename(df_ss_t3, "Level 2 Cause" = "cause_name_lvl2")
 fwrite(df_ss_t3, file.path(output_tables_dir, "SS_T3.csv"))
 
 
+
+
+
 ##----------------------------------------------------------------
-## DEPRECATED TABLE ####
-##
-## 2.5 TPE_T1 - Average spending by toc (all ages, all years) and delta (incremental cost) by HIV, SUD - Adjusted for 2019 dollars 
-##
-## This table uses the Two Part Estimates outputs
+## TPE_T1 — Average spending by cause (all ages, races, years combined)
+## Columns: Mean Cost (CI), HIV Delta (CI), SUD Delta (CI), HIV + SUD Delta (CI)
+## Source: 04.By_cause_inflation_adjusted_aggregated_unfiltered
 ##----------------------------------------------------------------
 
 # Set df
 df_tpe_t1 <- data_list$`04.By_cause_inflation_adjusted_aggregated_unfiltered`
 
-# Group by summary to get 
+# Aggregate across race/age/TOC/year, keeping disease conditions in rows
 df_tpe_t1 <- df_tpe_t1 %>%
   group_by(cause_name_lvl2) %>%
   summarise(
-    mean_cost = weighted.mean(mean_cost, w = total_row_count, na.rm = TRUE),
-    lower_ci = weighted.mean(lower_ci, w = total_row_count, na.rm = TRUE),
-    upper_ci = weighted.mean(upper_ci, w = total_row_count, na.rm = TRUE),
-    mean_delta_hiv = weighted.mean(mean_delta_hiv, w = total_row_count, na.rm = TRUE),
-    lower_ci_delta_hiv = weighted.mean(lower_ci_delta_hiv, w = total_row_count, na.rm = TRUE),
-    upper_ci_delta_hiv = weighted.mean(upper_ci_delta_hiv, w = total_row_count, na.rm = TRUE),
-    mean_delta_sud = weighted.mean(mean_delta_sud, w = total_row_count, na.rm = TRUE),
-    lower_ci_delta_sud = weighted.mean(lower_ci_delta_sud, w = total_row_count, na.rm = TRUE),
-    upper_ci_delta_sud = weighted.mean(upper_ci_delta_sud, w = total_row_count, na.rm = TRUE)
+    mean_cost              = weighted.mean(mean_cost,               w = total_row_count, na.rm = TRUE),
+    lower_ci               = weighted.mean(lower_ci,                w = total_row_count, na.rm = TRUE),
+    upper_ci               = weighted.mean(upper_ci,                w = total_row_count, na.rm = TRUE),
+    
+    mean_delta_hiv         = weighted.mean(mean_delta_hiv_only,     w = total_row_count, na.rm = TRUE),
+    lower_ci_delta_hiv     = weighted.mean(lower_ci_delta_hiv_only, w = total_row_count, na.rm = TRUE),
+    upper_ci_delta_hiv     = weighted.mean(upper_ci_delta_hiv_only, w = total_row_count, na.rm = TRUE),
+    
+    mean_delta_sud         = weighted.mean(mean_delta_sud_only,     w = total_row_count, na.rm = TRUE),
+    lower_ci_delta_sud     = weighted.mean(lower_ci_delta_sud_only, w = total_row_count, na.rm = TRUE),
+    upper_ci_delta_sud     = weighted.mean(upper_ci_delta_sud_only, w = total_row_count, na.rm = TRUE),
+    
+    mean_delta_hiv_sud     = weighted.mean(mean_delta_hiv_sud,      w = total_row_count, na.rm = TRUE),
+    lower_ci_delta_hiv_sud = weighted.mean(lower_ci_delta_hiv_sud,  w = total_row_count, na.rm = TRUE),
+    upper_ci_delta_hiv_sud = weighted.mean(upper_ci_delta_hiv_sud,  w = total_row_count, na.rm = TRUE),
+    .groups = "drop"
   )
 
-# Covert to dollar amounts
-for (col in colnames(df_tpe_t1)) {
-  if (col == "cause_name_lvl2" | col == "toc") {
-    next
-  } else {
-    df_tpe_t1[[col]] <- dollar(df_tpe_t1[[col]])
-  }
-}
-
-# Create mean + CI columns
+# Build display columns (dollar-formatted value with CI)
 df_tpe_t1 <- df_tpe_t1 %>%
   mutate(
-    mean_cost_CI = paste0(mean_cost, " (", lower_ci, " - ", upper_ci, ")"),
-    mean_HIV_delta_cost_CI = paste0(mean_delta_hiv, " (", lower_ci_delta_hiv, " - ", upper_ci_delta_hiv, ")"),
-    mean_SUD_delta_cost_CI = paste0(mean_delta_sud, " (", lower_ci_delta_sud, " - ", upper_ci_delta_sud, ")")
-  )
+    `Mean Cost (CI)`        = paste0(dollar(mean_cost),          " (", dollar(lower_ci),               " - ", dollar(upper_ci),               ")"),
+    `HIV Delta (CI)`        = paste0(dollar(mean_delta_hiv),     " (", dollar(lower_ci_delta_hiv),     " - ", dollar(upper_ci_delta_hiv),     ")"),
+    `SUD Delta (CI)`        = paste0(dollar(mean_delta_sud),     " (", dollar(lower_ci_delta_sud),     " - ", dollar(upper_ci_delta_sud),     ")"),
+    `HIV + SUD Delta (CI)`  = paste0(dollar(mean_delta_hiv_sud), " (", dollar(lower_ci_delta_hiv_sud), " - ", dollar(upper_ci_delta_hiv_sud), ")")
+  ) %>%
+  select(
+    cause_name_lvl2,
+    `Mean Cost (CI)`,
+    `HIV Delta (CI)`,
+    `SUD Delta (CI)`,
+    `HIV + SUD Delta (CI)`
+  ) %>%
+  rename(`Level 2 Cause` = cause_name_lvl2)
 
-# Pivot table wider based on toc
-cols_to_exclude <- c("mean_cost", "lower_ci", "upper_ci", "mean_delta_hiv", "lower_ci_delta_hiv", 
-                          "upper_ci_delta_hiv", "mean_delta_sud", "lower_ci_delta_sud", "upper_ci_delta_sud")
-
-df_tpe_t1_value_cols <- c("mean_cost_CI", "mean_HIV_delta_cost_CI", "mean_SUD_delta_cost_CI")
-
-df_tpe_t1 <- df_tpe_t1 %>%
-  select(-c(cols_to_exclude)) %>%
-  pivot_wider(
-    names_from = toc,
-    values_from = all_of(df_tpe_t1_value_cols)
-  )
-
-# Define desired TOC and condition order
-toc_order <- c("AM", "ED", "HH", "IP", "RX", "NF")
-condition_order <- c("mean_cost_CI", "mean_HIV_delta_cost_CI", "mean_SUD_delta_cost_CI")
-
-# Build column names in desired order: TOC first, then condition
-ordered_cols_tpe_t1 <- unlist(
-  lapply(toc_order, function(toc)
-    {paste0(condition_order, "_", toc)}
-    )
-  )
-
-# Reorder columns with acause_lvl2 first
-df_tpe_t1 <- df_tpe_t1 %>%
-  select(cause_name_lvl2, all_of(ordered_cols_tpe_t1))
-
-converted_names <- convert_colnames_general(colnames(df_tpe_t1))
-
-colnames(df_tpe_t1) <- converted_names
-
-# Save and output able as .csv
+# Save
 fwrite(df_tpe_t1, file.path(output_tables_dir, "TPE_T1.csv"))
+
+
 
 
 ##----------------------------------------------------------------

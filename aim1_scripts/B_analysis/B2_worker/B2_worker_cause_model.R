@@ -250,7 +250,7 @@ if (nrow(df_cause) == 0L) {
     
     # Part 1: logit
     mod_logit <- try(glm(
-      has_cost ~ has_hiv + has_sud + race_cd + sex_id,
+      has_cost ~ has_hiv * has_sud + race_cd + sex_id,
       data = df_boot, family = binomial(link = "logit")
     ), silent = TRUE)
     if (inherits(mod_logit, "try-error")) {
@@ -264,7 +264,7 @@ if (nrow(df_cause) == 0L) {
     }
     df_gamma_input[, tot_pay_amt := pmin(tot_pay_amt, quantile(tot_pay_amt, 0.995, na.rm = TRUE))]
     mod_gamma <- try(glm(
-      tot_pay_amt ~ has_hiv + has_sud + race_cd + sex_id,
+      tot_pay_amt ~ has_hiv * has_sud + race_cd + sex_id,
       data = df_gamma_input, family = Gamma(link = "log"),
       control = glm.control(maxit = 100)
     ), silent = TRUE)

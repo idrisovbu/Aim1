@@ -35,7 +35,7 @@ if (Sys.info()["sysname"] == 'Linux'){
 ##----------------------------------------------------------------
 # Dynamically read in directories where data is stored to see what data they have in the first place
 # Create a table based off their directory hierarchy (use code to scan folder directories to determine available data)
-run_id <- 77
+run_id <- 80
 fp_input_data <- paste0("/mnt/share/limited_use/LU_CMS/DEX/01_pipeline/MDCR/run_",run_id,"/F2T/")
 list_input_data <- list.dirs(fp_input_data, recursive = TRUE)
 
@@ -121,6 +121,6 @@ jid <- SUBMIT_ARRAY_JOB(
   time = "4:00:00", 
   user_email = paste0(user, "@uw.edu"),
   archive = FALSE,
-  test = F # F = Full Run, T = Test Run (only run the first job in a batch)
+  test = T # F = Full Run, T = Test Run (only run the first job in a batch)
 )
 

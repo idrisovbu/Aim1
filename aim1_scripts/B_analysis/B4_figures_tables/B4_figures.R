@@ -9,8 +9,8 @@
 # 0. Setup environment
 ##########################################################################
 rm(list = ls())
-pacman::p_load(ggplot2, readr, tidyverse, viridis, scales, ggsci)
-library(viridis)
+pacman::p_load(ggplot2, readr, tidyverse, viridis, scales, ggsci,viridis)
+
 
 # Set the current date for folder naming
 date_today <- format(Sys.time(), "%Y%m%d")
@@ -118,54 +118,47 @@ F1 <- df_master %>%
   theme_minimal(base_size = 13) +
   theme(legend.position = "none")
 
-save_plot(F1, "F1")
+save_plot(F1, "F1_totalcost")
+
 
 ##########################################################################
-# 1.22 Figure 2 - Mean delta comparison by cause 
+# 1.22 Figure 2 - Mean delta comparison by cause (HIV, SUD, HIV+SUD)
 ##########################################################################
 
-# # data prep - Need to get this section working to add in the HIV + SUD combo
-# df_F2 <- df_sub_cause %>%
-#   select(acause_lvl1, cause_name_lvl1, acause_lvl2, cause_name_lvl2,
-#          mean_delta_hiv_only_only, lower_ci_delta_hiv_only_only, upper_ci_delta_hiv_only_only,
-#          mean_delta_sud_only, lower_ci_delta_sud_only, upper_ci_delta_sud_only,
-#          mean_delta_hiv_only_sud, lower_ci_delta_hiv_only_sud, upper_ci_delta_hiv_only_sud) %>%
-#   pivot_longer(
-#     cols = c(mean_delta_hiv_only_only, mean_delta_sud_only, mean_delta_hiv_only_sud,
-#              lower_ci_delta_hiv_only_only, lower_ci_delta_sud_only, lower_ci_delta_hiv_only_sud,
-#              upper_ci_delta_hiv_only_only, upper_ci_delta_sud_only, upper_ci_delta_hiv_only_sud),
-#     names_to = c("stat", "scenario"),
-#     names_pattern = "(mean|lower_ci|upper_ci)_delta_(hiv|sud|hiv_sud)",
-#     values_to = "value"
-#   ) %>%
-#   pivot_wider(
-#     names_from = stat,
-#     values_from = value
-#   )
 
-# data prep
+# Prep long -> wide with correct column names
 df_F2 <- df_sub_cause %>%
-  select(acause_lvl1, cause_name_lvl1, acause_lvl2, cause_name_lvl2,
-         mean_delta_hiv_only_only, lower_ci_delta_hiv_only_only, upper_ci_delta_hiv_only_only,
-         mean_delta_sud_only, lower_ci_delta_sud_only, upper_ci_delta_sud_only) %>%
+  select(
+    acause_lvl1, cause_name_lvl1, acause_lvl2, cause_name_lvl2,
+    mean_delta_hiv_only,  lower_ci_delta_hiv_only,  upper_ci_delta_hiv_only,
+    mean_delta_sud_only,  lower_ci_delta_sud_only,  upper_ci_delta_sud_only,
+    mean_delta_hiv_sud,   lower_ci_delta_hiv_sud,   upper_ci_delta_hiv_sud
+  ) %>%
   pivot_longer(
-    cols = c(mean_delta_hiv_only_only, mean_delta_sud_only,
-             lower_ci_delta_hiv_only_only, lower_ci_delta_sud_only,
-             upper_ci_delta_hiv_only_only, upper_ci_delta_sud_only),
-    names_to = c("stat", "scenario"),
-    names_pattern = "(mean|lower_ci|upper_ci)_delta_(hiv|sud)",
-    values_to = "value"
+    cols = c(
+      mean_delta_hiv_only,  lower_ci_delta_hiv_only,  upper_ci_delta_hiv_only,
+      mean_delta_sud_only,  lower_ci_delta_sud_only,  upper_ci_delta_sud_only,
+      mean_delta_hiv_sud,   lower_ci_delta_hiv_sud,   upper_ci_delta_hiv_sud
+    ),
+    names_to   = c("stat", "scenario"),
+    names_pattern = "(mean|lower_ci|upper_ci)_delta_(hiv_only|sud_only|hiv_sud)",
+    values_to  = "value"
   ) %>%
   pivot_wider(
-    names_from = stat,
+    names_from  = stat,
     values_from = value
+  ) %>%
+  mutate(
+    scenario = factor(
+      scenario,
+      levels = c("hiv_only", "sud_only", "hiv_sud"),
+      labels = c("HIV", "SUD", "HIV + SUD")
+    )
   )
 
-df_F2$scenario <- factor(df_F2$scenario, levels = c("hiv", "sud"), labels = c("HIV", "Substance Use"))
-
-# plot 
+# Plot
 F2 <- ggplot(df_F2, aes(x = mean, y = reorder(cause_name_lvl2, mean), fill = scenario)) +
-  geom_bar(stat = "identity", position = position_dodge(width = 0.8), width = 0.7) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
   geom_errorbar(
     aes(xmin = lower_ci, xmax = upper_ci),
     width = 0.2,
@@ -173,66 +166,72 @@ F2 <- ggplot(df_F2, aes(x = mean, y = reorder(cause_name_lvl2, mean), fill = sce
   ) +
   geom_vline(xintercept = 0, color = "gray50", linetype = "dashed") +
   scale_fill_jama() +
-  scale_x_continuous(
-    breaks = c(-2500, 0, 2500, 7500, 12500),
-    labels = scales::dollar_format()
-  ) +
+  scale_x_continuous(labels = scales::dollar_format()) +
   labs(
-    title = "Mean Delta per Disease Category (HIV and SUD Only)",
-    x = "All years, care types and races (Change in Cost compared to No HIV & no SUD, 2019 USD)",
+    title = "Mean Delta per Disease Category (HIV, SUD, and HIV + SUD)",
+    x = "Change in Cost vs No HIV & No SUD (2019 USD)",
     y = "Disease Category",
     fill = "Scenario"
   ) +
-  guides(fill = guide_legend(reverse = TRUE)) +   # <---- This flips legend order!
+  guides(fill = guide_legend(reverse = TRUE)) +
   theme_minimal(base_size = 14) +
   theme(
     axis.title.x = element_text(margin = margin(t = 10)),
     axis.title.y = element_text(margin = margin(r = 10)),
-    axis.text.y = element_text(size = 10),
-    plot.title = element_text(hjust = 0.5)
+    axis.text.y  = element_text(size = 10),
+    plot.title   = element_text(hjust = 0.5)
   )
 
-save_plot(F2, "F2")
+save_plot(F2, "F2.Aim1c_delta_costs_HIV_SUD_vs_none.png")
+
+
 
 
 ##########################################################################
 # 1.23 Figure 3 - Mean delta by comorbidity, facet by race
 ##########################################################################
 
-#data prep
+##########################################################################
+# 1.23 Figure 3 - Mean delta by disease & comorbidity (facet by scenario)
+##########################################################################
+
+# quick check
+# colnames(df_sub_race)
+
 df_F3 <- df_sub_race %>%
-  select(acause_lvl1, cause_name_lvl1, acause_lvl2, cause_name_lvl2, race_cd,
-         mean_delta_hiv_only_only, lower_ci_delta_hiv_only_only, upper_ci_delta_hiv_only_only,
-         mean_delta_sud_only, lower_ci_delta_sud_only, upper_ci_delta_sud_only) %>%
-  pivot_longer(
-    cols = c(mean_delta_hiv_only_only, mean_delta_sud_only,
-             lower_ci_delta_hiv_only_only, lower_ci_delta_sud_only,
-             upper_ci_delta_hiv_only_only, upper_ci_delta_sud_only),
-    names_to = c("stat", "scenario"),
-    names_pattern = "(mean|lower_ci|upper_ci)_delta_(hiv|sud)",
-    values_to = "value"
+  select(
+    acause_lvl1, cause_name_lvl1, acause_lvl2, cause_name_lvl2, race_cd,
+    mean_delta_hiv_only,     lower_ci_delta_hiv_only,     upper_ci_delta_hiv_only,
+    mean_delta_sud_only,     lower_ci_delta_sud_only,     upper_ci_delta_sud_only,
+    mean_delta_hiv_sud,      lower_ci_delta_hiv_sud,      upper_ci_delta_hiv_sud
   ) %>%
-  pivot_wider(
-    names_from = stat,
-    values_from = value
+  pivot_longer(
+    cols = c(
+      mean_delta_hiv_only,  lower_ci_delta_hiv_only,  upper_ci_delta_hiv_only,
+      mean_delta_sud_only,  lower_ci_delta_sud_only,  upper_ci_delta_sud_only,
+      mean_delta_hiv_sud,   lower_ci_delta_hiv_sud,   upper_ci_delta_hiv_sud
+    ),
+    names_to   = c("stat", "scenario"),
+    names_pattern = "(mean|lower_ci|upper_ci)_delta_(hiv_only|sud_only|hiv_sud)",
+    values_to  = "value"
+  ) %>%
+  pivot_wider(names_from = stat, values_from = value) %>%
+  mutate(
+    scenario = factor(
+      scenario,
+      levels = c("hiv_only", "sud_only", "hiv_sud"),
+      labels = c("HIV", "SUD", "HIV + SUD")
+    )
   )
 
-df_F3$scenario <- factor(df_F3$scenario, 
-                                levels = c("hiv", "sud"), 
-                                labels = c("HIV", "SUD"))
-labs(
-  title = "Mean Delta by Disease and Comorbidity (by Race)",
-  subtitle = "All years, all ages",
-  x = "Mean Delta (Change in Cost compared to No HIV & SUD, 2019 USD)",
-  y = "Level 2 Disease Category",
-  fill = "Race"
-)
-
-## plot
-### need to do top 15 only 
+# #(optional) keep top 15 by absolute mean within each scenario for cleaner plot
+# df_F3 <- df_F3 %>%
+#   group_by(scenario) %>%
+#   slice_max(order_by = abs(mean), n = 15, with_ties = FALSE) %>%
+#   ungroup()
 
 F3 <- ggplot(
-  df_F3, 
+  df_F3,
   aes(x = mean, y = reorder(cause_name_lvl2, mean), fill = race_cd)
 ) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.8), width = 0.7) +
@@ -243,13 +242,10 @@ F3 <- ggplot(
   ) +
   geom_vline(xintercept = 0, color = "gray50", linetype = "dashed") +
   scale_fill_jama() +
-  scale_x_continuous(
-    breaks = c(-2500, 0, 2500, 7500, 12500),
-    labels = scales::dollar_format()
-  ) +
+  scale_x_continuous(labels = scales::dollar_format()) +
   labs(
     title = "Mean Delta by Disease and Comorbidity (by Race)",
-    x = "Mean Delta (Change in Cost compared to No HIV & SUD, 2019 USD)",
+    x = "Change in Cost vs No HIV & No SUD (2019 USD)",
     y = "Level 2 Disease Category",
     fill = "Race"
   ) +
@@ -257,12 +253,14 @@ F3 <- ggplot(
   theme(
     axis.title.x = element_text(margin = margin(t = 10)),
     axis.title.y = element_text(margin = margin(r = 10)),
-    axis.text.y = element_text(size = 10),
-    plot.title = element_text(hjust = 0.5)
+    axis.text.y  = element_text(size = 10),
+    plot.title   = element_text(hjust = 0.5)
   ) +
-  facet_wrap(~scenario)
+  facet_wrap(~ scenario)
 
-save_plot(F3, "F3")
+save_plot(F3, "F3.Aim1c_delta_costs_by_race_facet.png")
+
+
 
 ##########################################################################
 # 1.24 Figure 4 - Delta HIV over time all race
@@ -298,7 +296,7 @@ F4 <- ggplot(
   theme_minimal(base_size = 14) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-save_plot(F4, "F4")
+save_plot(F4, "F4.Aim1c_trends_HIV_SUD_by_race_age.png")
 
 ##########################################################################
 # 1.25 Figure 5 - HIV delta_cost_by_year_race_cd_facet_race
@@ -340,15 +338,21 @@ save_plot(F5, "F5")
 ##########################################################################
 # 1.26 Figure 6 - Delta MSUD over time all race_cd
 ##########################################################################
+##########################################################################
+# 1.26 Figure 6 - Delta SUD over time by race (all ages)
+##########################################################################
+
+# Build the summarized frame (note *_sud_only column names)
 df_ribbon_msud <- df_master %>%
   group_by(year_id, race_cd) %>%
   summarise(
-    mean_delta = weighted.mean(mean_delta_sud, total_row_count, na.rm = TRUE),
-    lower_ci = weighted.mean(lower_ci_delta_sud, total_row_count, na.rm = TRUE),
-    upper_ci = weighted.mean(upper_ci_delta_sud, total_row_count, na.rm = TRUE),
+    mean_delta = weighted.mean(mean_delta_sud_only,       w = total_row_count, na.rm = TRUE),
+    lower_ci   = weighted.mean(lower_ci_delta_sud_only,   w = total_row_count, na.rm = TRUE),
+    upper_ci   = weighted.mean(upper_ci_delta_sud_only,   w = total_row_count, na.rm = TRUE),
     .groups = "drop"
   )
 
+# Make the plot
 F6 <- ggplot(
   df_ribbon_msud,
   aes(x = as.integer(year_id), y = mean_delta, color = race_cd, group = race_cd, fill = race_cd)
@@ -358,10 +362,10 @@ F6 <- ggplot(
   geom_point(size = 2) +
   scale_color_jama() +
   scale_fill_jama() +
-  scale_x_continuous(breaks = unique(df_ribbon_msud$year_id)) +
+  scale_x_continuous(breaks = sort(unique(as.integer(df_ribbon_msud$year_id)))) +
   scale_y_continuous(labels = scales::dollar_format()) +
   labs(
-    title = "Cost Delta Over Time by Races (All Races, All Ages)",
+    title = "Cost Delta Over Time by Race (All Ages)",
     subtitle = "Weighted difference in cost (SUD+ vs SUD−); 95% CI; 2019 USD",
     x = "Year", y = "Mean Cost Delta (USD)",
     color = "Race", fill = "Race"
@@ -369,31 +373,33 @@ F6 <- ggplot(
   theme_minimal(base_size = 14) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
+# Save
 save_plot(F6, "F6")
+
 
 ##########################################################################
 # 1.27 Figure 7 - Cost Delta by Age and Race Over Time (SUD)
 ##########################################################################
+# ---- Figure 7: Cost Delta by Age and Race Over Time (SUD) ----
 F7 <- df_master %>%
   group_by(year_id, age_group_years_start, race_cd) %>%
   summarise(
-    mean_delta = weighted.mean(mean_delta_sud, total_row_count, na.rm = TRUE),
-    lower_ci = weighted.mean(lower_ci_delta_sud, total_row_count, na.rm = TRUE),
-    upper_ci = weighted.mean(upper_ci_delta_sud, total_row_count, na.rm = TRUE),
+    mean_delta = weighted.mean(mean_delta_sud_only,     total_row_count, na.rm = TRUE),
+    lower_ci   = weighted.mean(lower_ci_delta_sud_only, total_row_count, na.rm = TRUE),
+    upper_ci   = weighted.mean(upper_ci_delta_sud_only, total_row_count, na.rm = TRUE),
     .groups = "drop"
   ) %>%
-  mutate(age_group_years_start = factor(age_group_years_start, 
-                                        levels = sort(unique(age_group_years_start)))) %>%  # ensures numeric order
-  ggplot(aes(x = factor(year_id), 
-             y = mean_delta, 
-             color = age_group_years_start, 
-             group = age_group_years_start, 
-             fill = age_group_years_start)) +
+  mutate(age_group_years_start = factor(age_group_years_start,
+                                        levels = sort(unique(age_group_years_start)))) %>%
+  ggplot(aes(x = factor(year_id),
+             y = mean_delta,
+             color = age_group_years_start,
+             group = age_group_years_start,
+             fill  = age_group_years_start)) +
   geom_line(size = 1) +
   geom_point(size = 2) +
-  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci, 
-                  group = age_group_years_start, 
-                  fill = age_group_years_start), 
+  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci,
+                  group = age_group_years_start, fill = age_group_years_start),
               alpha = 0.2, color = NA) +
   scale_color_jama() +
   scale_fill_jama() +
@@ -411,16 +417,18 @@ F7 <- df_master %>%
 save_plot(F7, "F7")
 
 
+
 ##########################################################################
 # 1.28 Figure 8 - Modeled Incremental Cost (HIV+ vs HIV−) by Year, Race, and Age
 ##########################################################################
 
 F8 <- df_master %>%
+  filter(!is.na(year_id), !is.na(race_cd), !is.na(age_group_years_start)) %>%
   group_by(year_id, race_cd, age_group_years_start) %>%
   summarise(
-    delta = weighted.mean(mean_delta_hiv_only, total_row_count, na.rm = TRUE),
-    lower = weighted.mean(lower_ci_delta_hiv_only, total_row_count, na.rm = TRUE),
-    upper = weighted.mean(upper_ci_delta_hiv_only, total_row_count, na.rm = TRUE),
+    delta = weighted.mean(mean_delta_hiv_only,     w = total_row_count, na.rm = TRUE),
+    lower = weighted.mean(lower_ci_delta_hiv_only, w = total_row_count, na.rm = TRUE),
+    upper = weighted.mean(upper_ci_delta_hiv_only, w = total_row_count, na.rm = TRUE),
     .groups = "drop"
   ) %>%
   ggplot(aes(x = factor(year_id), y = delta, color = race_cd, group = race_cd)) +
@@ -438,22 +446,26 @@ F8 <- df_master %>%
   theme_minimal(base_size = 13) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-save_plot(F8, "F8")
+save_plot(F8, "F8.Aim1c_modeled_HIV_by_age_race.png")
 
 
 ##########################################################################
-# 1.29 Figure 9 - Carpet Plot - Percent of HIV-Attributable Spending per Disease, by Race
+# 1.29 Figure 9 - Percent of HIV-Attributable Spending per Disease, by Race
 ##########################################################################
-hiv_percent_race <- ggplot(
-  data = df_sub_race %>%
-    group_by(cause_name_lvl2) %>%
-    mutate(percent_mean_cost_hiv = mean_cost_hiv / sum(mean_cost_hiv, na.rm = TRUE) * 100) %>%
-    ungroup(),
-  aes(
-    x = reorder(cause_name_lvl2, cause_name_lvl2),
-    y = percent_mean_cost_hiv,
-    fill = factor(race_cd)  # or use  recoded variable for prettier legend
-  )
+
+hiv_percent_race <- df_sub_race %>%
+  group_by(cause_name_lvl2) %>%
+  mutate(total_hiv = sum(mean_cost_hiv, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(percent_mean_cost_hiv = if_else(total_hiv > 0,
+                                         100 * mean_cost_hiv / total_hiv,
+                                         NA_real_))
+
+F9 <- ggplot(
+  hiv_percent_race,
+  aes(x = reorder(cause_name_lvl2, cause_name_lvl2),
+      y = percent_mean_cost_hiv,
+      fill = factor(race_cd))
 ) +
   geom_bar(stat = "identity", position = "stack") +
   labs(
@@ -462,32 +474,36 @@ hiv_percent_race <- ggplot(
     y = "Percentage of Total HIV-Attributable Spending",
     fill = "Race"
   ) +
-  scale_y_continuous(labels = percent_format(scale = 1)) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) +
+  scale_fill_jama() +
   theme_minimal(base_size = 14) +
   theme(
-    plot.title = element_text(face = "plain", hjust = 0.5),
+    plot.title = element_text(hjust = 0.5),
     axis.title.x = element_text(margin = margin(t = 10)),
     axis.title.y = element_text(margin = margin(r = 10)),
     axis.text.x = element_text(angle = 45, hjust = 1)
-  ) +
-  scale_fill_jama()  # Use JAMA palette for race
-
-# Output
-save_plot(hiv_percent_race, "hiv_percent_race")
-
-##########################################################################
-# 1.3 Figure 10 - Carpet Plot - Percent of Spending per Beneficiary, HIV, by Age Group
-##########################################################################
-hiv_percent_age <- ggplot(
-  data = df_sub_age %>%
-    group_by(cause_name_lvl2) %>%
-    mutate(percent_mean_cost_hiv = mean_cost_hiv / sum(mean_cost_hiv, na.rm = TRUE) * 100) %>%
-    ungroup(),
-  aes(
-    x = reorder(cause_name_lvl2, cause_name_lvl2),
-    y = percent_mean_cost_hiv,
-    fill = factor(age_group_years_start)
   )
+
+save_plot(F9, "F9.Aim1c_percent_HIV_spending_by_race.png")
+
+
+##########################################################################
+# 1.30 (your 1.3) Figure 10 - Percent of HIV Spending per Beneficiary by Age Group
+##########################################################################
+
+hiv_percent_age <- df_sub_age %>%
+  group_by(cause_name_lvl2) %>%
+  mutate(total_hiv = sum(mean_cost_hiv, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(percent_mean_cost_hiv = if_else(total_hiv > 0,
+                                         100 * mean_cost_hiv / total_hiv,
+                                         NA_real_))
+
+F10 <- ggplot(
+  hiv_percent_age,
+  aes(x = reorder(cause_name_lvl2, cause_name_lvl2),
+      y = percent_mean_cost_hiv,
+      fill = factor(age_group_years_start))
 ) +
   geom_bar(stat = "identity", position = "stack") +
   labs(
@@ -496,38 +512,43 @@ hiv_percent_age <- ggplot(
     y = "Percentage of Total Spending per Disease",
     fill = "Age Group (Years)"
   ) +
-  scale_y_continuous(labels = scales::percent_format(scale = 1)) +  # Format y-axis as %
-  scale_fill_jama() +  # <- JAMA palette here
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) +
+  scale_fill_jama() +
   theme_minimal(base_size = 14) +
   theme(
-    plot.title = element_text(face = "plain", hjust = 0.5),
+    plot.title = element_text(hjust = 0.5),
     axis.title.x = element_text(margin = margin(t = 10)),
     axis.title.y = element_text(margin = margin(r = 10)),
     axis.text.x = element_text(angle = 45, hjust = 1)
   )
 
-# Output
-save_plot(hiv_percent_age, "hiv_percent_age")
+save_plot(F10, "F10.Aim1c_percent_HIV_spending_by_age.png")
 
 ##########################################################################
-# 1.31 Figure 11 - Average Cost per Beneficiary Over Time by Disease Category (with CI)
+# 1.31 Figure 11 - Average Cost per Beneficiary Over Time by Disease (with CI)
 ##########################################################################
-plot_mean_cost_by_disease_over_time <- df_master %>%
+
+F11 <- df_master %>%
+  filter(!is.na(year_id), !is.na(cause_name_lvl2)) %>%
   group_by(year_id, cause_name_lvl2) %>%
   summarise(
-    mean_cost = weighted.mean(mean_cost, total_row_count, na.rm = TRUE),
-    lower_ci = weighted.mean(lower_ci, total_row_count, na.rm = TRUE),
-    upper_ci = weighted.mean(upper_ci, total_row_count, na.rm = TRUE),
+    mean_cost = weighted.mean(mean_cost, w = total_row_count, na.rm = TRUE),
+    lower_ci  = weighted.mean(lower_ci,  w = total_row_count, na.rm = TRUE),
+    upper_ci  = weighted.mean(upper_ci,  w = total_row_count, na.rm = TRUE),
     .groups = "drop"
   ) %>%
-  ggplot(aes(x = as.integer(year_id), y = mean_cost, color = cause_name_lvl2, group = cause_name_lvl2, fill = cause_name_lvl2)) +
+  ggplot(aes(x = as.integer(year_id),
+             y = mean_cost,
+             color = cause_name_lvl2,
+             group = cause_name_lvl2,
+             fill = cause_name_lvl2)) +
   geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci), alpha = 0.17, color = NA) +
   geom_line(size = 1.1) +
   geom_point(size = 2) +
   scale_color_viridis_d(option = "turbo") +
   scale_fill_viridis_d(option = "turbo") +
   scale_y_continuous(labels = scales::dollar_format()) +
-  scale_x_continuous(breaks = unique(df_master$year_id)) +
+  scale_x_continuous(breaks = sort(unique(df_master$year_id))) +
   labs(
     title = "Average Cost per Beneficiary Over Time by Disease Category",
     x = "Year", y = "Mean Cost (USD)", color = "Disease", fill = "Disease"
@@ -535,5 +556,153 @@ plot_mean_cost_by_disease_over_time <- df_master %>%
   theme_minimal(base_size = 13) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-save_plot(plot_mean_cost_by_disease_over_time, "mean_cost_over_time_by_disease_ribbons_viridis")
+save_plot(F11,
+          "F11.Aim1c_mean_costs_over_time_by_disease.png")
+
+
+##----------------------------------------------------------------
+## Load HIV- and SUD-specific analytic tables (05.* files)
+##----------------------------------------------------------------
+
+# HIV datasets
+df_hiv_master     <- read_csv(file.path(input_dir, "05.HIV_inflation_adjusted_aggregated.csv"))
+df_hiv_sub_age    <- read_csv(file.path(input_dir, "05.HIV_subtable_by_age.csv"))
+df_hiv_sub_cause_year <- read_csv(file.path(input_dir, "05.HIV_subtable_by_cause_year.csv"))
+df_hiv_sub_cause  <- read_csv(file.path(input_dir, "05.HIV_subtable_by_cause.csv"))
+df_hiv_sub_race   <- read_csv(file.path(input_dir, "05.HIV_subtable_by_race.csv"))
+df_hiv_sub_year   <- read_csv(file.path(input_dir, "05.HIV_subtable_by_year.csv"))
+
+# SUD datasets
+df_sud_master     <- read_csv(file.path(input_dir, "05.SUD_inflation_adjusted_aggregated.csv"))
+df_sud_sub_age    <- read_csv(file.path(input_dir, "05.SUD_subtable_by_age.csv"))
+df_sud_sub_cause_year <- read_csv(file.path(input_dir, "05.SUD_subtable_by_cause_year.csv"))
+df_sud_sub_cause  <- read_csv(file.path(input_dir, "05.SUD_subtable_by_cause.csv"))
+df_sud_sub_race   <- read_csv(file.path(input_dir, "05.SUD_subtable_by_race.csv"))
+df_sud_sub_year   <- read_csv(file.path(input_dir, "05.SUD_subtable_by_year.csv"))
+
+
+##########################################################################
+
+##########################################################################
+
+##---------------------------------------------------------------
+## HIV vs HIV+SUD mean cost over time (with 95% CI)
+## Aggregates across race/age/file_type using total_row_count
+##---------------------------------------------------------------
+
+df_hiv_year <- df_hiv_master %>%
+  group_by(year_id) %>%
+  summarise(
+    mean_cost_hiv      = weighted.mean(mean_cost_hiv,      total_row_count, na.rm = TRUE),
+    lower_ci_hiv       = weighted.mean(lower_ci_hiv,       total_row_count, na.rm = TRUE),
+    upper_ci_hiv       = weighted.mean(upper_ci_hiv,       total_row_count, na.rm = TRUE),
+    mean_cost_hiv_sud  = weighted.mean(mean_cost_hiv_sud,  total_row_count, na.rm = TRUE),
+    lower_ci_hiv_sud   = weighted.mean(lower_ci_hiv_sud,   total_row_count, na.rm = TRUE),
+    upper_ci_hiv_sud   = weighted.mean(upper_ci_hiv_sud,   total_row_count, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Build tidy long data (no pivots -> no list-cols)
+df_plot <- bind_rows(
+  df_hiv_year %>%
+    transmute(
+      year_id = as.integer(year_id),
+      group   = "HIV",
+      mean    = mean_cost_hiv,
+      lower   = lower_ci_hiv,
+      upper   = upper_ci_hiv
+    ),
+  df_hiv_year %>%
+    transmute(
+      year_id = as.integer(year_id),
+      group   = "HIV + SUD",
+      mean    = mean_cost_hiv_sud,
+      lower   = lower_ci_hiv_sud,
+      upper   = upper_ci_hiv_sud
+    )
+)
+
+plot_hiv_vs_hiv_sud <- ggplot(df_plot,
+                              aes(x = year_id, y = mean, color = group, fill = group, group = group)
+) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.15, color = NA) +
+  geom_line(size = 1.2) +
+  geom_point(size = 2) +
+  scale_y_continuous(labels = scales::dollar_format()) +
+  scale_x_continuous(breaks = sort(unique(df_plot$year_id))) +
+  scale_color_jama() +
+  scale_fill_jama() +
+  labs(
+    title = "Mean Cost per Beneficiary: HIV vs HIV + SUD (95% CI)",
+    subtitle = "Medicare beneficiaries 65–85; aggregated across race and age; 2019 USD",
+    x = "Year", y = "Mean Cost per Beneficiary(USD)", color = "Group", fill = "Group"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+save_plot(plot_hiv_vs_hiv_sud, "F14.Aim1a_HIV_vs_HIV_SUD.png")
+
+
+##########################################################################
+# Figure: Mean cost over time — SUD alone vs SUD + HIV (with 95% CIs)
+##########################################################################
+
+# 1) Aggregate across race and age by year using total_row_count as weights
+df_sud_agg <- df_sud_master %>%
+  group_by(year_id) %>%
+  summarise(
+    mean_cost_sud      = weighted.mean(mean_cost_sud,      w = total_row_count, na.rm = TRUE),
+    lower_ci_sud       = weighted.mean(lower_ci_sud,       w = total_row_count, na.rm = TRUE),
+    upper_ci_sud       = weighted.mean(upper_ci_sud,       w = total_row_count, na.rm = TRUE),
+    mean_cost_hiv_sud  = weighted.mean(mean_cost_hiv_sud,  w = total_row_count, na.rm = TRUE),
+    lower_ci_hiv_sud   = weighted.mean(lower_ci_hiv_sud,   w = total_row_count, na.rm = TRUE),
+    upper_ci_hiv_sud   = weighted.mean(upper_ci_hiv_sud,   w = total_row_count, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 2) Reshape to long for plotting
+df_sud_plot <- df_sud_agg %>%
+  pivot_longer(
+    cols = -year_id,
+    names_to = c("stat", "group"),
+    names_pattern = "(mean_cost|lower_ci|upper_ci)_(sud|hiv_sud)",
+    values_to = "value"
+  ) %>%
+  mutate(stat = recode(stat, mean_cost = "mean", .default = stat)) %>%  # rename for consistency
+  pivot_wider(
+    names_from  = stat,
+    values_from = value
+  ) %>%
+  mutate(
+    group = factor(group,
+                   levels = c("sud",      "hiv_sud"),
+                   labels = c("SUD", "SUD + HIV"))
+  ) %>%
+  arrange(group, year_id)
+
+# 3) Plot
+plot_sud_vs_hiv_sud <- ggplot(
+  df_sud_plot,
+  aes(x = as.integer(year_id), y = mean, color = group, fill = group, group = group)
+) +
+  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci), alpha = 0.18, color = NA) +
+  geom_line(size = 1.1) +
+  geom_point(size = 2) +
+  scale_color_jama() +
+  scale_fill_jama() +
+  scale_x_continuous(breaks = sort(unique(df_sud_plot$year_id))) +
+  scale_y_continuous(labels = scales::dollar_format()) +
+  labs(
+    title = "Mean Cost per Beneficiary: SUD alone vs SUD + HIV (95% CI)",
+    subtitle = "Medicare beneficiaries 65–85; aggregated across race and age; 2019 USD",
+    x = "Year",
+    y = "Mean Cost per Beneficiary (USD)",
+    color = "Group",
+    fill  = "Group"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# 4) Save
+save_plot(plot_sud_vs_hiv_sud, "F13.Aim1a_SUD_vs_SUD_HIV.png")
 

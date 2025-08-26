@@ -188,122 +188,122 @@ fwrite(summary_dt, out_path_summary)
 
 cat("Summary statistics saved to:", out_path_summary, "\n")
 
-##----------------------------------------------------------------
-## 3. Run logistic and gamma regressions
-##----------------------------------------------------------------
-
-# Ensure factor levels are established
-#toc_levels <- c("AM", "ED", "HH", "IP", "NF", "RX")
-
-df_input[, `:=`(
-  acause_lvl2   = factor(acause_lvl2),
-  race_cd       = factor(race_cd),
-  sex_id        = factor(sex_id),
-  has_hiv       = factor(has_hiv, levels = c(0, 1)),
-  has_sud       = factor(has_sud, levels = c(0, 1)),
-  has_hepc      = factor(has_hepc, levels = c(0, 1)),
-  has_cost      = factor(has_cost, levels = c(0, 1))
-)]
-##----------------------------------------------------------------
-## Check diversity of toc levels (write to log only)
-##----------------------------------------------------------------
-valid_toc_levels <- df_input[, unique(na.omit(as.character(toc)))]
-n_unique_toc <- length(valid_toc_levels)
-
-# if (n_unique_toc < 2 & file_type != "RX") {
-#   msg <- paste0(
-#     "❌ REGRESSION HALTED\n",
-#     "Reason: Less than 2 levels of toc present\n",
-#     "Year: ", year_id, " | Age group: ", age_group_years_start, "\n",
-#     "Available toc levels: ", paste(valid_toc_levels, collapse = ", "), "\n",
-#     "Timestamp: ", Sys.time(), "\n"
-#   )
-#   writeLines(msg, con = log_file)
-#   stop("Insufficient toc variation for regression (see log).")
+# ##----------------------------------------------------------------
+# ## 3. Run logistic and gamma regressions
+# ##----------------------------------------------------------------
+# 
+# # Ensure factor levels are established
+# #toc_levels <- c("AM", "ED", "HH", "IP", "NF", "RX")
+# 
+# df_input[, `:=`(
+#   acause_lvl2   = factor(acause_lvl2),
+#   race_cd       = factor(race_cd),
+#   sex_id        = factor(sex_id),
+#   has_hiv       = factor(has_hiv, levels = c(0, 1)),
+#   has_sud       = factor(has_sud, levels = c(0, 1)),
+#   has_hepc      = factor(has_hepc, levels = c(0, 1)),
+#   has_cost      = factor(has_cost, levels = c(0, 1))
+# )]
+# ##----------------------------------------------------------------
+# ## Check diversity of toc levels (write to log only)
+# ##----------------------------------------------------------------
+# valid_toc_levels <- df_input[, unique(na.omit(as.character(toc)))]
+# n_unique_toc <- length(valid_toc_levels)
+# 
+# # if (n_unique_toc < 2 & file_type != "RX") {
+# #   msg <- paste0(
+# #     "❌ REGRESSION HALTED\n",
+# #     "Reason: Less than 2 levels of toc present\n",
+# #     "Year: ", year_id, " | Age group: ", age_group_years_start, "\n",
+# #     "Available toc levels: ", paste(valid_toc_levels, collapse = ", "), "\n",
+# #     "Timestamp: ", Sys.time(), "\n"
+# #   )
+# #   writeLines(msg, con = log_file)
+# #   stop("Insufficient toc variation for regression (see log).")
+# # }
+# 
+# # Skip iterations with low factor level diversity
+# if (nlevels(droplevels(df_input$has_hiv)) < 2 ||
+#     nlevels(droplevels(df_input$has_sud)) < 2 ||
+#     nlevels(droplevels(df_input$acause_lvl2)) < 2) {
+#   cat("Error - ", b, "- insufficient factor diversity\n")
+#   stop("Insufficient factor levels in dataset! Issue caused by has_hiv, has_sud, or acause_lvl2 having less than 2 factor levels")
 # }
-
-# Skip iterations with low factor level diversity
-if (nlevels(droplevels(df_input$has_hiv)) < 2 ||
-    nlevels(droplevels(df_input$has_sud)) < 2 ||
-    nlevels(droplevels(df_input$acause_lvl2)) < 2) {
-  cat("Error - ", b, "- insufficient factor diversity\n")
-  stop("Insufficient factor levels in dataset! Issue caused by has_hiv, has_sud, or acause_lvl2 having less than 2 factor levels")
-}
-
-#### Set regression formulas
-# Logistic model (toc_fact removed for RX)
-mod_logit <- glm(
-  has_cost ~ acause_lvl2 * has_hiv +
-    acause_lvl2 * has_sud +
-    race_cd + sex_id,
-  data   = df_input,
-  family = binomial(link = "logit"))
-
-# Gamma input
-df_gamma_input <- df_input[tot_pay_amt > 0]
-df_gamma_input[, tot_pay_amt := pmin(tot_pay_amt, quantile(tot_pay_amt, 0.995, na.rm = TRUE))]
-
-# Gamma model 
-mod_gamma <- glm(
-  tot_pay_amt ~ acause_lvl2 * has_hiv +
-    acause_lvl2 * has_sud +
-    race_cd + sex_id,
-  data    = df_gamma_input,
-  family  = Gamma(link = "log"),
-  control = glm.control(maxit = 100)
-)
-
-
-##----------------------------------------------------------------
-## 4. Save regression coefficients
-##----------------------------------------------------------------
-
-# Extract coefficients and p-values
-extract_all_coefs <- function(model, suffix) {
-  tidy(model) %>%
-    filter(term != "(Intercept)") %>%
-    rename(
-      variable = term,
-      !!paste0("estimate_", suffix) := estimate,
-      !!paste0("p_", suffix) := p.value
-    ) %>%
-    select(variable, starts_with("estimate_"), starts_with("p_"))
-}
-
-logit_df <- extract_all_coefs(mod_logit, "logit")
-gamma_df <- extract_all_coefs(mod_gamma, "gamma")
-
-# Merge and annotate regression coefficients
-regression_results <- full_join(logit_df, gamma_df, by = "variable") %>%
-  mutate(
-    interaction_dropped = if_else(is.na(estimate_gamma) & str_detect(variable, ":"), TRUE, FALSE),
-    year_id = year_id,
-    file_type = file_type,
-    age_group_years_start = age_group_years_start
-  ) %>%
-  select(variable, estimate_logit, p_logit, estimate_gamma, p_gamma,
-         interaction_dropped, year_id, file_type, age_group_years_start)
-
-# Save regression coefficients
-file_out_regression <- generate_filename("regression_results", ".csv")
-out_path_regression <- file.path(regression_estimates_folder, file_out_regression)
-write_csv(regression_results, out_path_regression)
-cat("✅ Regression coefficients saved to:", out_path_regression, "\n")
-
-##----------------------------------------------------------------
-## 4. Save Full Model Summaries
-##----------------------------------------------------------------
-
-# Save full model summaries
-save_model_summary <- function(model, model_name, folder) {
-  fname <- generate_filename(paste0("full_model_summary_", model_name), ".txt")
-  fpath <- file.path(folder, fname)
-  writeLines(capture.output(summary(model)), fpath)
-  cat("📄 Full model summary saved to:", fpath, "\n")
-}
-
-save_model_summary(mod_logit, "logit", regression_estimates_folder)
-save_model_summary(mod_gamma, "gamma", regression_estimates_folder)
-
-message("Job ended at: ", Sys.time())
-
+# 
+# #### Set regression formulas
+# # Logistic model (toc_fact removed for RX)
+# mod_logit <- glm(
+#   has_cost ~ acause_lvl2 * has_hiv +
+#     acause_lvl2 * has_sud +
+#     race_cd + sex_id,
+#   data   = df_input,
+#   family = binomial(link = "logit"))
+# 
+# # Gamma input
+# df_gamma_input <- df_input[tot_pay_amt > 0]
+# df_gamma_input[, tot_pay_amt := pmin(tot_pay_amt, quantile(tot_pay_amt, 0.995, na.rm = TRUE))]
+# 
+# # Gamma model 
+# mod_gamma <- glm(
+#   tot_pay_amt ~ acause_lvl2 * has_hiv +
+#     acause_lvl2 * has_sud +
+#     race_cd + sex_id,
+#   data    = df_gamma_input,
+#   family  = Gamma(link = "log"),
+#   control = glm.control(maxit = 100)
+# )
+# 
+# 
+# ##----------------------------------------------------------------
+# ## 4. Save regression coefficients
+# ##----------------------------------------------------------------
+# 
+# # Extract coefficients and p-values
+# extract_all_coefs <- function(model, suffix) {
+#   tidy(model) %>%
+#     filter(term != "(Intercept)") %>%
+#     rename(
+#       variable = term,
+#       !!paste0("estimate_", suffix) := estimate,
+#       !!paste0("p_", suffix) := p.value
+#     ) %>%
+#     select(variable, starts_with("estimate_"), starts_with("p_"))
+# }
+# 
+# logit_df <- extract_all_coefs(mod_logit, "logit")
+# gamma_df <- extract_all_coefs(mod_gamma, "gamma")
+# 
+# # Merge and annotate regression coefficients
+# regression_results <- full_join(logit_df, gamma_df, by = "variable") %>%
+#   mutate(
+#     interaction_dropped = if_else(is.na(estimate_gamma) & str_detect(variable, ":"), TRUE, FALSE),
+#     year_id = year_id,
+#     file_type = file_type,
+#     age_group_years_start = age_group_years_start
+#   ) %>%
+#   select(variable, estimate_logit, p_logit, estimate_gamma, p_gamma,
+#          interaction_dropped, year_id, file_type, age_group_years_start)
+# 
+# # Save regression coefficients
+# file_out_regression <- generate_filename("regression_results", ".csv")
+# out_path_regression <- file.path(regression_estimates_folder, file_out_regression)
+# write_csv(regression_results, out_path_regression)
+# cat("✅ Regression coefficients saved to:", out_path_regression, "\n")
+# 
+# ##----------------------------------------------------------------
+# ## 4. Save Full Model Summaries
+# ##----------------------------------------------------------------
+# 
+# # Save full model summaries
+# save_model_summary <- function(model, model_name, folder) {
+#   fname <- generate_filename(paste0("full_model_summary_", model_name), ".txt")
+#   fpath <- file.path(folder, fname)
+#   writeLines(capture.output(summary(model)), fpath)
+#   cat("📄 Full model summary saved to:", fpath, "\n")
+# }
+# 
+# save_model_summary(mod_logit, "logit", regression_estimates_folder)
+# save_model_summary(mod_gamma, "gamma", regression_estimates_folder)
+# 
+# message("Job ended at: ", Sys.time())
+# 

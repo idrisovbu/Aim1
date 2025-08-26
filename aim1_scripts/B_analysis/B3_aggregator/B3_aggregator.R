@@ -47,12 +47,22 @@ ensure_dir_exists <- function(dir_path) {
 }
 
 # Define input directory 
-date_of_input <- "20250820" # bested from 20250731
+date_of_input <- "bested" # bested from 20250820
 base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis"
 input_summary_stats <- file.path(base_dir, "01.Summary_Statistics", date_of_input)
-input_regression_estimates <- file.path(base_dir, "02.Regression_Estimates", date_of_input)
+
 input_meta_stats <- file.path(base_dir, "03.Meta_Statistics", date_of_input) 
 input_by_cause <- file.path(base_dir, "04.Two_Part_Estimates", date_of_input, "by_cause/results")
+
+## input data for regression (too large to move into bested folder)
+date_of_regression <- "20250820"
+input_regression_estimates <- file.path(
+  base_dir,
+  "04.Two_Part_Estimates",
+  date_of_regression,       # <-- variable (e.g., "20250824")
+  "by_cause",
+  "regression_coefficients"
+)
 
 # Define output directory
 date_of_output <- format(Sys.time(), "%Y%m%d")
@@ -93,28 +103,6 @@ weighted_mean_all <- function(df, group_cols, value_cols, weight_col) {
       .groups = "drop"
     )
 }
-
-### the funciton below will remove cases when raw count is zero:
-# weighted_mean_all <- function(df, group_cols, value_cols, weight_col) {
-#   df %>%
-#     dplyr::group_by(dplyr::across(dplyr::all_of(group_cols))) %>%
-#     dplyr::summarise(
-#       total_bin_count = sum(.data[[weight_col]], na.rm = TRUE),
-#       dplyr::across(
-#         dplyr::all_of(value_cols),
-#         ~ {
-#           w <- .data[[weight_col]]
-#           sw <- sum(w, na.rm = TRUE)
-#           if (is.finite(sw) && sw > 0) weighted.mean(.x, w, na.rm = TRUE) else NA_real_
-#         },
-#         .names = "{.col}"
-#       ),
-#       .groups = "drop"
-#     ) %>%
-#     # optional: drop zero-weight groups entirely
-#     dplyr::filter(total_bin_count > 0)
-# }
-
 
 
 ##----------------------------------------------------------------
@@ -224,16 +212,66 @@ cat("All descriptive summary subtables have been saved to CSV in", output_folder
 ## 2. Aggregate & Summarize - 02.Regression_Estimates
 ##----------------------------------------------------------------
 
-# Get the list of all CSV files from the input directory
-files_list_re <- list.files(input_regression_estimates, pattern = "\\.csv$", full.names = TRUE) 
 
-# Read and combine all files into a single dataframe
-df_input_re <- purrr::map_dfr(files_list_re, ~readr::read_csv(.x, show_col_types = FALSE))
+# Files (recursive under input_regression_estimates)
+files_list_re <- list.files(
+  input_regression_estimates,
+  pattern = "\\.csv$",
+  full.names = TRUE,
+  recursive = TRUE
+)
+stopifnot(length(files_list_re) > 0)
 
-# Save the aggregated Regression Estimates as CSV
+# Columns to keep (exactly these 11)
+cols_needed <- c(
+  "variable",
+  "estimate_logit",
+  "p_logit",
+  "estimate_gamma",
+  "p_gamma",
+  "interaction_dropped",
+  "year_id",
+  "file_type",
+  "age_group_years_start",
+  "bootstrap_number",
+  "cause_name"
+)
+
+# (Optional) type hints for speed/consistency
+col_classes <- list(
+  character = c("variable", "file_type", "cause_name"),
+  integer   = c("year_id", "age_group_years_start", "bootstrap_number"),
+  numeric   = c("estimate_logit", "p_logit", "estimate_gamma", "p_gamma"),
+  logical   = c("interaction_dropped")
+)
+
+# Read and stack
+read_one <- function(f) {
+  fread(f, select = cols_needed, colClasses = col_classes, showProgress = FALSE)
+}
+df_input_re <- rbindlist(lapply(files_list_re, read_one), use.names = TRUE, fill = TRUE)
+
+# Ensure column order and write
+setcolorder(df_input_re, cols_needed)
+
 output_file_re <- file.path(output_folder, "02.Regression_Estimates_aggregated.csv")
-write_csv(df_input_re, output_file_re)
+fwrite(df_input_re, output_file_re)
 cat("Regression estimates table saved:", output_file_re, "\n")
+
+
+
+# ####OLD REGRD code below
+# 
+# # Get the list of all CSV files from the input directory
+# files_list_re <- list.files(input_regression_estimates, pattern = "\\.csv$", full.names = TRUE) 
+# 
+# # Read and combine all files into a single dataframe
+# df_input_re <- purrr::map_dfr(files_list_re, ~readr::read_csv(.x, show_col_types = FALSE))
+# 
+# # Save the aggregated Regression Estimates as CSV
+# output_file_re <- file.path(output_folder, "02.Regression_Estimates_aggregated.csv")
+# write_csv(df_input_re, output_file_re)
+# cat("Regression estimates table saved:", output_file_re, "\n")
 
 ##----------------------------------------------------------------
 ## 2.1 Regression Subtables
@@ -292,18 +330,6 @@ write_csv(by_cause, file.path(output_folder, "02.Regression_Estimates_subtable_s
 colnames(df_input_re)
 unique(df_input_re$variable)
 
-by_toc <- df_input_re %>%
-  filter(grepl("^toc_fact", variable)) %>%
-  group_by(variable) %>%
-  summarise(
-    n_estimates = n(),
-    prop_sig_logit = mean(sig_logit, na.rm = TRUE),
-    prop_sig_gamma = mean(sig_gamma, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-write_csv(by_toc, file.path(output_folder, "02.Regression_Estimates_subtable_sig_by_toc.csv"))
-
 
 #  By age group only
 by_age <- df_input_re %>%
@@ -347,6 +373,7 @@ df_input_ms <- map_dfr(files_list_ms, ~read_csv(.x, show_col_types = FALSE))
 ##----------------------------------------------------------------
 ## 3.2 Save aggregated Metastats inputs to CSV
 ##----------------------------------------------------------------
+colnames(df_input_ms)
 output_file_ms <- file.path(output_folder, "03.Meta_Statistics_aggregated.csv")
 write_csv(df_input_ms, output_file_ms)
 cat("table saved", output_file_ms, "\n")
@@ -376,6 +403,48 @@ total_bene_by_year_toc <- df_input_ms %>%
   summarise(total_unique_bene = sum(total_unique_bene, na.rm = TRUE)) %>%
   arrange(year_id, toc)
 
+
+##----------------------------------------------------------------
+## 3.3b  Collapse across TOC: beneficiary stats by year only
+##----------------------------------------------------------------
+
+# Columns to sum when collapsing across toc
+count_cols <- c(
+  "total_unique_bene",
+  "total_bene_acause_combo",
+  "hiv_unique_bene",
+  "sud_unique_bene",
+  "hepc_unique_bene",
+  "hiv_and_sud_unique_bene",
+  "hiv_and_hepc_unique_bene",
+  "sud_and_hepc_unique_bene",
+  "hiv_sud_hepc_unique_bene"
+)
+
+bene_by_year_collapsed <- df_input_ms %>%
+  group_by(year_id) %>%
+  summarise(
+    # weighted mean cost across TOC using beneficiary counts
+    mean_any_cost = weighted.mean(mean_any_cost, w = total_unique_bene, na.rm = TRUE),
+    
+    # sum all beneficiary counts across TOC
+    across(all_of(count_cols), ~ sum(.x, na.rm = TRUE)),
+    
+    # convenience fields: which TOCs exist in that year
+    toc_list = paste(sort(unique(toc)), collapse = ", "),
+    toc_unique_count = n_distinct(toc),
+    .groups = "drop"
+  ) %>%
+  arrange(year_id)
+
+# Save
+output_file_by_year_collapsed <- file.path(
+  output_folder,
+  "03.Meta_Statistics_subtable_bene_by_year_collapsed_toc.csv"
+)
+write_csv(bene_by_year_collapsed, output_file_by_year_collapsed)
+cat("Collapsed-by-TOC (year-only) table saved:", output_file_by_year_collapsed, "\n")
+
 ##----------------------------------------------------------------
 ## 3.4 Output beneficiary stats tables to CSV
 ##----------------------------------------------------------------
@@ -387,7 +456,6 @@ write_csv(total_bene_by_year, output_file_by_year)
 # Save total unique beneficiaries by year and toc
 output_file_by_year_toc <- file.path(output_folder, "03.Meta_Statistics_subtable_bene_by_year_by_toc.csv")
 write_csv(total_bene_by_year_toc, output_file_by_year_toc)
-
 
 ##----------------------------------------------------------------
 ## 4. Aggregate & Summarize - 04.Two_Part_Estimates: BY CAUSE
@@ -476,7 +544,9 @@ readr::write_csv(df_input_by_cause, output_file_by_cause_full)
 cat("Full (all non-HIV/SUD causes) table saved to:", output_file_by_cause_full, "\n")
 
 # optional additional exclusions beyond HIV/SUD if desired
-causes_to_exclude <- c("_mental", "mater_neonat", "_rf", "_well", "_sense") # Excluding these + HIV & SUD results in 18 causes
+#causes_to_exclude <- c("_mental", "mater_neonat", "_rf", "_well", "_sense") # Excluding these + HIV & SUD results in 18 causes
+causes_to_exclude <- c("mater_neonat", "_rf", "_well", "_sense") # Excluding these + HIV & SUD results in 18 causes
+
 df_input_by_cause_filtered <- df_input_by_cause %>%
   dplyr::filter(!acause_lvl2 %in% causes_to_exclude)
 
