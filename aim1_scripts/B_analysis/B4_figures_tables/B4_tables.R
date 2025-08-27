@@ -673,7 +673,7 @@ converted_names <- convert_colnames_general(colnames(df_tpe_t2))
 colnames(df_tpe_t2) <- converted_names
 
 # Save and output able as .csv
-fwrite(df_tpe_t2, file.path(output_tables_dir, "TPE_T2.csv"))
+fwrite(df_tpe_t2, file.path(output_tables_dir, "TPE_T2_by_age.csv"))
 
 
 ##----------------------------------------------------------------
@@ -756,7 +756,7 @@ converted_names <- convert_colnames_general(colnames(df_tpe_t3))
 colnames(df_tpe_t3) <- converted_names
 
 # Save and output able as .csv
-fwrite(df_tpe_t3, file.path(output_tables_dir, "TPE_T3.csv"))
+fwrite(df_tpe_t3, file.path(output_tables_dir, "TPE_T3_by_race.csv"))
 
 ##----------------------------------------------------------------
 ## 2.8 TPE_T4 - Average spending by age, all toc all years combined, 3 scenarios - HIV only
@@ -833,7 +833,7 @@ converted_names <- convert_colnames_general(colnames(df_tpe_t4))
 colnames(df_tpe_t4) <- converted_names
 
 # Save and output able as .csv
-fwrite(df_tpe_t4, file.path(output_tables_dir, "TPE_T4.csv"))
+fwrite(df_tpe_t4, file.path(output_tables_dir, "TPE_T4_hiv_by_age.csv"))
 
 
 ##----------------------------------------------------------------
@@ -911,7 +911,7 @@ converted_names <- convert_colnames_general(colnames(df_tpe_t5))
 colnames(df_tpe_t5) <- converted_names
 
 # Save and output able as .csv
-fwrite(df_tpe_t5, file.path(output_tables_dir, "TPE_T5.csv"))
+fwrite(df_tpe_t5, file.path(output_tables_dir, "TPE_T5_hiv_by_race.csv"))
 
 ##----------------------------------------------------------------
 ## 2.10 TPE_T6 - Average spending by age, all toc all years combined, 3 scenarios - SUD only
@@ -983,7 +983,7 @@ converted_names <- convert_colnames_general(colnames(df_tpe_t6))
 colnames(df_tpe_t6) <- converted_names
 
 # Save and output able as .csv
-fwrite(df_tpe_t6, file.path(output_tables_dir, "TPE_T6.csv"))
+fwrite(df_tpe_t6, file.path(output_tables_dir, "TPE_T6_sud_by_age.csv"))
 
 
 ##----------------------------------------------------------------
@@ -1056,7 +1056,7 @@ converted_names <- convert_colnames_general(colnames(df_tpe_t7))
 colnames(df_tpe_t7) <- converted_names
 
 # Save and output able as .csv
-fwrite(df_tpe_t7, file.path(output_tables_dir, "TPE_T7.csv"))
+fwrite(df_tpe_t7, file.path(output_tables_dir, "TPE_T7_sud_by_race.csv"))
 
 
 ##----------------------------------------------------------------
