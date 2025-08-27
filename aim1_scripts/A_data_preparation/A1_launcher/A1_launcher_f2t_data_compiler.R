@@ -121,6 +121,6 @@ jid <- SUBMIT_ARRAY_JOB(
   time = "4:00:00", 
   user_email = paste0(user, "@uw.edu"),
   archive = FALSE,
-  test = T # F = Full Run, T = Test Run (only run the first job in a batch)
+  test = F # F = Full Run, T = Test Run (only run the first job in a batch)
 )
 

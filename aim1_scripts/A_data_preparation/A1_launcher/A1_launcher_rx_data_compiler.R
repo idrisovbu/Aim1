@@ -35,7 +35,7 @@ if (Sys.info()["sysname"] == 'Linux'){
 ## 1. Create parameters CSV file
 ##----------------------------------------------------------------
 # Define run ID and input data path
-run_id <- 77
+run_id <- 80
 fp_input_data <- paste0("/mnt/share/limited_use/LU_CMS/DEX/01_pipeline/MDCR/run_", run_id, "/CAUSEMAP/data/carrier=false/toc=RX")
 
 list_input_data <- list.dirs(fp_input_data, recursive = TRUE)
@@ -117,7 +117,7 @@ jid <- SUBMIT_ARRAY_JOB(
   n_jobs = nrow(df_list_input_unique_combinations),
   memory = "100G", 
   threads = 1, 
-  time = "1:00:00",
+  time = "1:00:00", # only took about ~10 min
   user_email = paste0(user, "@uw.edu"),
   archive = FALSE,
   test = F # F = Full Run, T = Test Run (only run the first job in a batch)

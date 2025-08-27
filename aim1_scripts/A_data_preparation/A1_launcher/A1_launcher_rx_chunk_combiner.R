@@ -36,7 +36,7 @@ if (Sys.info()["sysname"] == 'Linux'){
 ##----------------------------------------------------------------
 
 # List out processed RX Chunks
-date_of_rx_chunk_input <- "20250809" #format(Sys.time(), "%Y%m%d")
+date_of_rx_chunk_input <- "20250826" #format(Sys.time(), "%Y%m%d")
 
 rx_input_data_dir <- file.path("/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/", date_of_rx_chunk_input, "rx_chunks")
 
@@ -124,7 +124,7 @@ jid <- SUBMIT_ARRAY_JOB(
   n_jobs = nrow(df_rx_unique_combos),
   memory = "20G",
   threads = 1, 
-  time = "00:30:00", 
+  time = "00:30:00", #takes about ~2 min
   user_email = paste0(user, "@uw.edu"),
   archive = FALSE,
   test = F # F = Full Run, T = Test Run (only run the first job in a batch)
