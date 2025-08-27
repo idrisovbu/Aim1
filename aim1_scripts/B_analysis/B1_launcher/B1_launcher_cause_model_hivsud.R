@@ -66,8 +66,8 @@ log_dir  <- file.path(l, "LU_CMS/DEX/hivsud/aim1/B_analysis/logs", log_date)
 dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
 
 
-bootstrap_iterations_F2T <- 25
-bootstrap_iterations_RX  <- 25
+bootstrap_iterations_F2T <- 1000
+bootstrap_iterations_RX  <- 1000
 
 #### was running 1 hour with these specs. 
 
@@ -81,7 +81,7 @@ jid <- SUBMIT_ARRAY_JOB(
   n_jobs     = nrow(df_params),
   memory     = "150G",         # often enough per cause; adjust if needed
   threads    = 1,
-  time       = "01:00:00",    # adjust per dataset size/boots
+  time       = "04:00:00",    # adjust per dataset size/boots
   user_email = paste0(user, "@uw.edu"),
   archive    = FALSE,
   test       = F
