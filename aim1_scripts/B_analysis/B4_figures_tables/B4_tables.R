@@ -1135,7 +1135,7 @@ df_tpe9_ss <- data_list$`01.Summary_Statistics_inflation_adjusted_aggregated`
 df_tpe9_ss <- df_tpe9_ss %>%
   group_by(acause_lvl2, has_hiv, has_sud) %>%
   summarise(
-    mean_cost = weighted.mean(avg_cost_per_bene, w = total_unique_bene, na.rm = TRUE)
+    mean_cost = weighted.mean(avg_cost_per_bene_winsorized, w = total_unique_bene, na.rm = TRUE) # comparing with winsorized mean from SS output
   )
 
 df_tpe9_ss <- left_join(x = df_tpe9_ss, y = df_map, by = "acause_lvl2") %>%

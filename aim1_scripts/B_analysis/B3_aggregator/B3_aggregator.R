@@ -128,7 +128,7 @@ df_input_ss <- map_dfr(files_list_ss, ~read_csv(.x, show_col_types = FALSE))
 # Source of CPI https://www.bls.gov/cpi/tables/supplemental-files/historical-cpi-u-202404.pdf
 
 # Adjust cost variables
-cost_columns <- c("avg_cost_per_bene", "max_cost_per_bene", "quantile_99_cost_per_bene","sum_cost_per_group")
+cost_columns <- c("avg_cost_per_bene", "avg_cost_per_bene_winsorized","max_cost_per_bene", "quantile_99_cost_per_bene","sum_cost_per_group")
 
 df_adj_ss <- deflate(
   data = df_input_ss,
@@ -142,6 +142,7 @@ summary_table <- df_adj_ss %>%
   group_by(acause_lvl2, has_hiv, has_sud, has_hepc, race_cd, toc, age_group_years_start, year_id, file_type) %>%
   summarise(
     avg_cost_per_bene = weighted.mean(avg_cost_per_bene, n_benes_per_group, na.rm = TRUE),
+    avg_cost_per_bene_winsorized = weighted.mean(avg_cost_per_bene_winsorized, n_benes_per_group, na.rm = TRUE),
     max_cost_per_bene = max(max_cost_per_bene, na.rm = TRUE),
     quantile_99_cost_per_bene = weighted.mean(quantile_99_cost_per_bene, n_benes_per_group, na.rm = TRUE),
     sum_cost_per_group = sum(sum_cost_per_group, na.rm = TRUE),
@@ -161,7 +162,7 @@ cat("inflation-adjusted summary table saved to:", file.path(output_folder, "01.S
 
 # Only numeric columns!
 value_cols <- c(
-  "has_hiv", "has_sud", "has_hepc", "avg_cost_per_bene", "max_cost_per_bene",
+  "has_hiv", "has_sud", "has_hepc", "avg_cost_per_bene", "avg_cost_per_bene_winsorized","max_cost_per_bene",
   "quantile_99_cost_per_bene", "sum_cost_per_group", "n_benes_per_group",
   "avg_encounters_per_bene", "sum_encounters_per_group"
 )
