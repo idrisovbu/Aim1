@@ -1116,6 +1116,169 @@ df_tpe_t8 <- full_join(x = df_tpe_t8_hiv, y = df_tpe_t8_sud, by = c("Year"))
 # Save and output able as .csv
 fwrite(df_tpe_t8, file.path(output_tables_dir, "TPE_T8.csv"))
 
+##----------------------------------------------------------------
+## 2.13 TPE_T9 
+#   All years, all toc, all races, all age groups
+# Rows: 25 diseases (including HIV and SUD)
+# Columns:
+#   Mean Cost Summary (CI - no CI for ss), Mean Cost Modeled (CI), Delta, 
+# HIV Cost Summary (CI), HIV Cost Modeled (CI), Delta
+# same thing for SUD, same thing for HIV + SUD
+##
+## This table uses the By-cause two part estimates and Summary stats
+##----------------------------------------------------------------
+
+
+# Create summary stats data
+df_tpe9_ss <- data_list$`01.Summary_Statistics_inflation_adjusted_aggregated`
+
+df_tpe9_ss <- df_tpe9_ss %>%
+  group_by(acause_lvl2, has_hiv, has_sud) %>%
+  summarise(
+    mean_cost = weighted.mean(avg_cost_per_bene, w = total_unique_bene, na.rm = TRUE)
+  )
+
+df_tpe9_ss <- left_join(x = df_tpe9_ss, y = df_map, by = "acause_lvl2") %>%
+  ungroup() %>%
+  select(-c("acause_lvl2", "acause_lvl1", "cause_name_lvl1"))
+
+df_tpe9_ss <- df_tpe9_ss %>%
+  mutate(combo = paste0(has_hiv, has_sud)) %>%   # e.g. 00, 01, 10, 11
+  pivot_wider(
+    id_cols = cause_name_lvl2,                   # what stays as identifier
+    names_from = combo,                          # new column names from combos
+    values_from = mean_cost                      # values to spread
+  ) %>%
+  setnames(old = c("cause_name_lvl2","00", "01", "10", "11"),
+           new = c("Level 2 Cause","Mean Cost Summary", "SUD Cost Summary", "HIV Cost Summary", "HIV + SUD Cost Summary"))
+
+
+# Create TPE data
+
+# By-cause (w/o HIV SUD) df
+# Set df
+df_tpe9_tpe <- data_list$`04.By_cause_inflation_adjusted_aggregated_unfiltered`
+
+# Aggregate across race/age/TOC/year, keeping disease conditions in rows
+df_tpe9_tpe <- df_tpe9_tpe %>%
+  group_by(cause_name_lvl2) %>%
+  summarise(
+    mean_cost              = weighted.mean(mean_cost,               w = total_row_count, na.rm = TRUE),
+    lower_ci               = weighted.mean(lower_ci,                w = total_row_count, na.rm = TRUE),
+    upper_ci               = weighted.mean(upper_ci,                w = total_row_count, na.rm = TRUE),
+    
+    mean_cost_hiv         = weighted.mean(mean_cost_hiv,     w = total_row_count, na.rm = TRUE),
+    lower_ci_hiv     = weighted.mean(lower_ci_hiv, w = total_row_count, na.rm = TRUE),
+    upper_ci_hiv     = weighted.mean(upper_ci_hiv, w = total_row_count, na.rm = TRUE),
+    
+    mean_cost_sud         = weighted.mean(mean_cost_sud,     w = total_row_count, na.rm = TRUE),
+    lower_ci_sud     = weighted.mean(lower_ci_sud, w = total_row_count, na.rm = TRUE),
+    upper_ci_sud     = weighted.mean(upper_ci_sud, w = total_row_count, na.rm = TRUE),
+    
+    mean_cost_hiv_sud     = weighted.mean(mean_cost_hiv_sud,      w = total_row_count, na.rm = TRUE),
+    lower_ci_hiv_sud = weighted.mean(lower_ci_hiv_sud,  w = total_row_count, na.rm = TRUE),
+    upper_ci_hiv_sud = weighted.mean(upper_ci_hiv_sud,  w = total_row_count, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# By-cause (w/ HIV SUD) df
+
+# SUD
+# Set df
+df_tpe9_tpe_sud <- data_list$`05.SUD_inflation_adjusted_aggregated`
+
+# Group by summary to get 
+df_tpe9_tpe_sud <- df_tpe9_tpe_sud %>%
+  group_by(cause_name_lvl2) %>%
+  summarise(
+    mean_cost_sud = weighted.mean(mean_cost_sud, w = total_row_count, na.rm = TRUE),
+    lower_ci_sud = weighted.mean(lower_ci_sud, w = total_row_count, na.rm = TRUE),
+    upper_ci_sud = weighted.mean(upper_ci_sud, w = total_row_count, na.rm = TRUE),
+    
+    mean_cost_hiv_sud = weighted.mean(mean_cost_hiv_sud, w = total_row_count, na.rm = TRUE),
+    lower_ci_hiv_sud = weighted.mean(lower_ci_hiv_sud, w = total_row_count, na.rm = TRUE),
+    upper_ci_hiv_sud = weighted.mean(upper_ci_hiv_sud, w = total_row_count, na.rm = TRUE)
+  )
+
+# HIV
+# Set df
+df_tpe9_tpe_hiv <- data_list$`05.HIV_inflation_adjusted_aggregated`
+
+# Group by summary to get 
+df_tpe9_tpe_hiv <- df_tpe9_tpe_hiv %>%
+  group_by(cause_name_lvl2) %>%
+  summarise(
+    mean_cost_hiv = weighted.mean(mean_cost_hiv, w = total_row_count, na.rm = TRUE),
+    lower_ci_hiv = weighted.mean(lower_ci_hiv, w = total_row_count, na.rm = TRUE),
+    upper_ci_hiv = weighted.mean(upper_ci_hiv, w = total_row_count, na.rm = TRUE),
+    
+    mean_cost_hiv_sud = weighted.mean(mean_cost_hiv_sud, w = total_row_count, na.rm = TRUE),
+    lower_ci_hiv_sud = weighted.mean(lower_ci_hiv_sud, w = total_row_count, na.rm = TRUE),
+    upper_ci_hiv_sud = weighted.mean(upper_ci_hiv_sud, w = total_row_count, na.rm = TRUE)
+  )
+
+
+# Row bind the three by-cause dfs
+df_tpe9 <- bind_rows(df_tpe9_tpe, df_tpe9_tpe_sud, df_tpe9_tpe_hiv)
+
+# Build display columns (dollar-formatted value with CI)
+df_tpe9 <- df_tpe9 %>%
+  mutate(
+    `Mean Cost Modeled (CI)` = paste0(dollar(mean_cost),          " (", dollar(lower_ci),               " - ", dollar(upper_ci),               ")"),
+    `HIV Cost Modeled (CI)`  = paste0(dollar(mean_cost_hiv),     " (", dollar(lower_ci_hiv),     " - ", dollar(upper_ci_hiv),     ")"),
+    `SUD Cost Modeled (CI)`        = paste0(dollar(mean_cost_sud),     " (", dollar(lower_ci_sud),     " - ", dollar(upper_ci_sud),     ")"),
+    `HIV + SUD Cost Modeled (CI)`  = paste0(dollar(mean_cost_hiv_sud), " (", dollar(lower_ci_hiv_sud), " - ", dollar(upper_ci_hiv_sud), ")")
+  ) 
+
+# column bind the SS data
+df_tpe9_join <- left_join(x = df_tpe9, y = df_tpe9_ss, by = c("cause_name_lvl2" = "Level 2 Cause"))
+
+# Calculate deltas between summary and modeled 
+df_tpe9_join <- df_tpe9_join %>%
+  mutate(
+    `Mean Cost Delta` = `Mean Cost Summary` - `mean_cost`,
+    `HIV Cost Delta` = `HIV Cost Summary` - `mean_cost_hiv`,
+    `SUD Cost Delta` = `SUD Cost Summary` - `mean_cost_sud`,
+    `HIV + SUD Cost Delta` = `HIV + SUD Cost Summary` - `mean_cost_hiv_sud`
+  ) 
+
+# Convert columns to dollars
+cols_to_convert <- c("mean_cost", "lower_ci", "upper_ci", "mean_cost_hiv", 
+                     "lower_ci_hiv", "upper_ci_hiv", "mean_cost_sud", "lower_ci_sud", 
+                     "upper_ci_sud", "mean_cost_hiv_sud", "lower_ci_hiv_sud", "upper_ci_hiv_sud", 
+                      "Mean Cost Summary", "SUD Cost Summary", 
+                     "HIV Cost Summary", "HIV + SUD Cost Summary", "Mean Cost Delta", 
+                     "HIV Cost Delta", "SUD Cost Delta", "HIV + SUD Cost Delta")
+
+cols_to_omit <- c("cause_name_lvl2", "Mean Cost Modeled (CI)", "HIV Cost Modeled (CI)", "SUD Cost Modeled (CI)", 
+                  "HIV + SUD Cost Modeled (CI)")
+
+# Covert to dollar amounts
+for (col in cols_to_convert) {
+  df_tpe9_join[[col]] <- dollar(df_tpe9_join[[col]])
+}
+
+# Arrange columns in final desired order + drop unnecessary columns
+df_tpe9_col_order <- c("cause_name_lvl2", 
+                       "Mean Cost Summary", "Mean Cost Modeled (CI)",  "Mean Cost Delta", 
+                       "HIV Cost Summary", "HIV Cost Modeled (CI)",  "HIV Cost Delta",
+                       "SUD Cost Summary", "SUD Cost Modeled (CI)", "SUD Cost Delta",
+                       "HIV + SUD Cost Summary", "HIV + SUD Cost Modeled (CI)",  "HIV + SUD Cost Delta")
+
+df_tpe9_final <- df_tpe9_join %>% select(all_of(df_tpe9_col_order))
+                      
+df_tpe9_final <- df_tpe9_final %>% setnames(old = "cause_name_lvl2", new = "Level 2 Cause")               
+
+# Manually set NA where NA values should belong
+df_tpe9_final$`Mean Cost Modeled (CI)`[df_tpe9_final$`Level 2 Cause` == "HIV/AIDS"] <- NA
+df_tpe9_final$`Mean Cost Modeled (CI)`[df_tpe9_final$`Level 2 Cause` == "Substance use disorders"] <- NA
+df_tpe9_final$`SUD Cost Modeled (CI)`[df_tpe9_final$`Level 2 Cause` == "HIV/AIDS"] <- NA
+df_tpe9_final$`HIV Cost Modeled (CI)`[df_tpe9_final$`Level 2 Cause` == "Substance use disorders"] <- NA
+
+# Save and output able as .csv
+fwrite(df_tpe9_final, file.path(output_tables_dir, "TPE_T9.csv"))
+
+
 
 
 

@@ -9,7 +9,7 @@
 # 0. Setup environment
 ##########################################################################
 rm(list = ls())
-pacman::p_load(ggplot2, readr, tidyverse, viridis, scales, ggsci,viridis)
+pacman::p_load(ggplot2, readr, tidyverse, viridis, scales, ggsci,viridis, plotly, htmlwidgets) 
 
 
 # Set the current date for folder naming
@@ -63,6 +63,32 @@ save_plot <- function(ggplot_obj, ggplot_name, width = 12, height = 10, dpi = 50
   
   message("Plot saved as: ", normalizePath(file_path))
 }
+
+##----------------------------------------------------------------
+## 0.2 Load in Cause Map File
+##----------------------------------------------------------------
+
+# Load and clean the mapping file
+# Detect IHME cluster by checking for /mnt/share/limited_use
+if (dir.exists("/mnt/share/limited_use")) {
+  fp_cause_map <- "/mnt/share/dex/us_county/maps/causelist_figures.csv"
+} else {
+  # Mac
+  # TBD
+  
+  # Windows
+  fp_cause_map <- file.path(resources_dir, "acause_mapping_table.csv")
+}
+
+# Read in cause_map
+df_map <- read_csv(fp_cause_map, show_col_types = FALSE) %>%
+  select(acause, acause_lvl2, cause_name_lvl2, acause_lvl1, cause_name_lvl1) %>%
+  mutate(
+    acause_lvl2      = if_else(acause == "hiv", "hiv", acause_lvl2),
+    cause_name_lvl2  = if_else(acause == "hiv", "HIV/AIDS", cause_name_lvl2),
+    acause_lvl2      = if_else(acause == "std", "std", acause_lvl2),
+    cause_name_lvl2  = if_else(acause == "std", "Sexually transmitted infections", cause_name_lvl2)
+  ) %>% select(-acause) %>% unique()
 
 ##########################################################################
 # 1. Two-parts estimates figures analysis
@@ -586,7 +612,7 @@ df_sud_sub_year   <- read_csv(file.path(input_dir, "05.SUD_subtable_by_year.csv"
 ##########################################################################
 
 ##---------------------------------------------------------------
-## HIV vs HIV+SUD mean cost over time (with 95% CI)
+## Figure 14: HIV vs HIV+SUD mean cost over time (with 95% CI)
 ## Aggregates across race/age/file_type using total_row_count
 ##---------------------------------------------------------------
 
@@ -644,7 +670,7 @@ save_plot(plot_hiv_vs_hiv_sud, "F14.Aim1a_HIV_vs_HIV_SUD.png")
 
 
 ##########################################################################
-# Figure: Mean cost over time — SUD alone vs SUD + HIV (with 95% CIs)
+# Figure 13: Mean cost over time — SUD alone vs SUD + HIV (with 95% CIs)
 ##########################################################################
 
 # 1) Aggregate across race and age by year using total_row_count as weights
@@ -705,4 +731,79 @@ plot_sud_vs_hiv_sud <- ggplot(
 
 # 4) Save
 save_plot(plot_sud_vs_hiv_sud, "F13.Aim1a_SUD_vs_SUD_HIV.png")
+
+##########################################################################
+# Figure 15: Using SS plot spending by disease over years to investigate 2016 drop
+# Rows = years, columns = diseases (neither, hiv, sud, hiv+sud, so four lines total), all age groups, all races, all sexes combined
+##########################################################################
+
+# Load SS data
+df_f15 <- read.csv(file = file.path(input_dir, "01.Summary_Statistics_inflation_adjusted_aggregated.csv"))
+
+# Group by summary to get mean_cost for all races all years all age groups
+df_f15 <- df_f15 %>%
+  group_by(acause_lvl2, year_id, has_hiv, has_sud) %>%
+  summarise(
+    mean_cost = weighted.mean(avg_cost_per_bene, w = total_unique_bene, na.rm = TRUE)
+  )
+
+# Merge with mapping table for cause names
+df_f15 <- left_join(x = df_f15, y = df_map, by = "acause_lvl2") %>%
+  ungroup() %>%
+  select(-c("acause_lvl2", "acause_lvl1", "cause_name_lvl1"))
+
+# Pivot wider
+df_f15 <- df_f15 %>%
+  mutate(combo = paste0(has_hiv, has_sud)) %>%   # e.g. 00, 01, 10, 11
+  pivot_wider(
+    id_cols = c(cause_name_lvl2, year_id),                   # what stays as identifier
+    names_from = combo,                          # new column names from combos
+    values_from = mean_cost                      # values to spread
+  ) %>%
+  setnames(old = c("cause_name_lvl2", "year_id", "00", "01", "10", "11"),
+           new = c("Level 2 Cause", "Year","Mean Cost Summary", "SUD Cost Summary", "HIV Cost Summary", "HIV + SUD Cost Summary"))
+
+# Convert to dollars
+for (col in colnames(df_f15)) {
+  if (col == "Level 2 Cause" | col == "Year") {
+    next
+  } else {
+    df_f15[[col]] <- dollar(df_f15[[col]])
+  }
+}
+
+# Pivot long for plot
+df_f15_long <- df_f15 %>%
+  mutate(
+    `Mean Cost Summary`      = parse_number(`Mean Cost Summary`),
+    `SUD Cost Summary`       = parse_number(`SUD Cost Summary`),
+    `HIV Cost Summary`       = parse_number(`HIV Cost Summary`),
+    `HIV + SUD Cost Summary` = parse_number(`HIV + SUD Cost Summary`)
+  ) %>%
+  pivot_longer(
+    cols = c(`Mean Cost Summary`, `SUD Cost Summary`, `HIV Cost Summary`, `HIV + SUD Cost Summary`),
+    names_to = "cost_type",
+    values_to = "cost_usd"
+  ) %>%
+  mutate(
+    cost_type = recode(cost_type,
+                       `Mean Cost Summary`      = "Mean",
+                       `SUD Cost Summary`       = "SUD",
+                       `HIV Cost Summary`       = "HIV",
+                       `HIV + SUD Cost Summary` = "HIV + SUD"
+    )
+  )
+
+# Make a ggplot and convert to plotly
+p15 <- ggplot(df_f15_long, aes(x = Year, y = cost_usd, color = cost_type, group = cost_type)) +
+  geom_line() +
+  geom_point(size = 1) +
+  facet_wrap(vars(`Level 2 Cause`), scales = "free_y") +
+  scale_y_continuous(labels = scales::dollar) +
+  labs(x = "Year", y = "Cost (USD)", color = "Cost Type") +
+  theme_minimal(base_size = 12)
+
+p15_plotly <- ggplotly(p15, tooltip = c("Year", "cost_usd", "cost_type", "Level 2 Cause"))
+
+saveWidget(p15_plotly, file.path(output_dir, "F15.SS_2016_drop.html"), selfcontained = TRUE)
 
