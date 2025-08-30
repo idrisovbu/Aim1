@@ -55,7 +55,7 @@ input_meta_stats <- file.path(base_dir, "03.Meta_Statistics", date_of_input)
 input_by_cause <- file.path(base_dir, "04.Two_Part_Estimates", date_of_input, "by_cause/results")
 
 ## input data for regression (too large to move into bested folder)
-date_of_regression <- "20250820"
+date_of_regression <- "20250826"
 input_regression_estimates <- file.path(
   base_dir,
   "04.Two_Part_Estimates",
@@ -328,8 +328,8 @@ by_cause <- df_input_re %>%
   )
 write_csv(by_cause, file.path(output_folder, "02.Regression_Estimates_subtable_sig_by_cause.csv"))
 
-colnames(df_input_re)
-unique(df_input_re$variable)
+# colnames(df_input_re)
+# unique(df_input_re$variable)
 
 
 #  By age group only
