@@ -150,7 +150,7 @@ slugify <- function(x) {
 make_cause_dirs <- function(cause_name) {
   cause_slug <- slugify(cause_name)
   boot_dir   <- file.path(by_cause_boot_parent,    cause_slug, year_id, age_group_years_start)
-  regression_coefficients_dir   <- file.path(by_cause_regression_coefficients,    cause_slug, year_id, age_group_years_start)
+  regression_coefficients_dir   <- file.path(by_cause_regression_coefficients, cause_slug)
   res_dir    <- file.path(by_cause_results_parent, cause_slug)
   ensure_dir_exists(boot_dir)
   ensure_dir_exists(res_dir)
@@ -236,6 +236,9 @@ df_bins_summary <- df_bins_master %>%
   summarise(total_row_count = sum(row_count, na.rm = TRUE), .groups = "drop") %>%
   mutate(acause_lvl2 = cause_name) %>%
   select(acause_lvl2, race_cd, age_group_years_start, total_row_count)
+
+# --- Create DF to store regression outputs ----------------------------------
+list_regression <- list()
 
 # --- Seed
 set.seed(123)
@@ -404,12 +407,15 @@ for (b in seq_len(B)) {
     regression_results$bootstrap_number <- b
     regression_results$cause_name <- cause_name
     
-    # Save regression coefficients
-    file_out_regression <- generate_filename("regression_results", ".csv")
-    file_out_regression <- sub("\\.csv$", paste0("_bootstrap#", b, ".csv"), file_out_regression)
-    out_path_regression <- file.path(regression_coefficients_output_folder, file_out_regression)
-    write_csv(regression_results, out_path_regression)
-    cat("✅ Regression coefficients saved to:", out_path_regression, "\n")
+    # Add to regression list
+    list_regression[[b]] <- regression_results 
+    
+    # # Save regression coefficients (should be safe to delete)
+    # file_out_regression <- generate_filename("regression_results", ".csv")
+    # file_out_regression <- sub("\\.csv$", paste0("_bootstrap#", b, ".csv"), file_out_regression)
+    # out_path_regression <- file.path(regression_coefficients_output_folder, file_out_regression)
+    # write_csv(regression_results, out_path_regression)
+    # cat("✅ Regression coefficients saved to:", out_path_regression, "\n")
     
     kept_iters <- kept_iters + 1L
   }
@@ -661,5 +667,13 @@ write.csv(df_summary, final_path, row.names = FALSE)
 cat("[", cause_name, "] Wrote final cause summary to:", final_path, "\n", sep = "")
 
 cat("\nDone. Per-cause results are in:\n", file.path(output_folder, "by_cause"), "\n")
+
+# Combine regression outputs and save as parquet
+df_regression_outputs <- do.call(rbind, list_regression)
+
+file_out_regression <- generate_filename("regression_results", ".parquet")
+out_path_regression <- file.path(regression_coefficients_output_folder, file_out_regression)
+write_parquet(df_regression_outputs, out_path_regression)
+cat("✅ Regression coefficients saved to:", out_path_regression, "\n")
 
 

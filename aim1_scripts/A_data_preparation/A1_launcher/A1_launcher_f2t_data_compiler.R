@@ -65,12 +65,19 @@ df_list_input_data_subset <- df_list_input_data_subset %>% mutate(toc = str_extr
 # Convert age_group_years_start to numeric if a character string
 df_list_input_data_subset$age_group_years_start <- as.numeric(df_list_input_data_subset$age_group_years_start)
 
-# Filter out ages below 65 and above 85, and specifically filter out toc = NF for 2019
+# Filter out ages below 60 and above 85, and specifically filter out toc = NF for 2019
+# df_list_input_data_subset <- df_list_input_data_subset %>%
+#   filter(
+#     age_group_years_start >= 60,
+#     age_group_years_start <= 85,
+#     !(toc == "NF" & year_id != "2019")
+#   )
+
 df_list_input_data_subset <- df_list_input_data_subset %>%
   filter(
-    age_group_years_start >= 65,
+    age_group_years_start >= 60,    
     age_group_years_start <= 85,
-    !(toc == "NF" & year_id != "2019")
+    toc == "IP"                     
   )
 
 # Tabular visualiaztion of available TOC per year

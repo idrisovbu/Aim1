@@ -156,6 +156,7 @@ acause_utilization_dt <- df_input[, .(
 # Cost summary
 acause_cost_dt <- df_input[, .(
   avg_cost_per_bene = mean(tot_pay_amt, na.rm = TRUE),
+  avg_cost_per_encounter = sum(tot_pay_amt) / sum(unique_encounters),
   # Winsorized mean (cutting at 99.5%)
   avg_cost_per_bene_winsorized = {
     cutoff <- quantile(tot_pay_amt, probs = 0.995, na.rm = TRUE)
@@ -181,7 +182,7 @@ summary_dt[, `:=`(year_id = year_id, file_type = file_type)]
 # Set column order
 setcolorder(summary_dt, c(
   "acause_lvl2", "has_hiv", "has_sud", "has_hepc", "race_cd", "toc", "age_group_years_start",
-  "avg_cost_per_bene", "avg_cost_per_bene_winsorized","max_cost_per_bene", "quantile_99_cost_per_bene", "sum_cost_per_group",
+  "avg_cost_per_bene", "avg_cost_per_encounter","avg_cost_per_bene_winsorized","max_cost_per_bene", "quantile_99_cost_per_bene", "sum_cost_per_group",
   "n_benes_per_group", "avg_encounters_per_bene", "sum_encounters_per_group",
   "year_id", "file_type"
 ))

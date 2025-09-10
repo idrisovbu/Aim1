@@ -37,7 +37,7 @@ if (Sys.info()["sysname"] == 'Linux'){
 }
 
 ##----------------------------------------------------------------
-## 0. Create directory folders 
+## 0.1 Create directory folders 
 ##----------------------------------------------------------------
 # Ensure the output directory exists
 ensure_dir_exists <- function(dir_path) {
@@ -47,7 +47,7 @@ ensure_dir_exists <- function(dir_path) {
 }
 
 # Define input directory 
-date_of_input <- "bested" # bested from 20250820
+date_of_input <- "20250910" # bested from 20250820
 base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis"
 input_summary_stats <- file.path(base_dir, "01.Summary_Statistics", date_of_input)
 
@@ -55,7 +55,7 @@ input_meta_stats <- file.path(base_dir, "03.Meta_Statistics", date_of_input)
 input_by_cause <- file.path(base_dir, "04.Two_Part_Estimates", date_of_input, "by_cause/results")
 
 ## input data for regression (too large to move into bested folder)
-date_of_regression <- "20250826"
+date_of_regression <- "20250910"
 input_regression_estimates <- file.path(
   base_dir,
   "04.Two_Part_Estimates",
@@ -73,7 +73,7 @@ ensure_dir_exists(output_folder)
 
 
 ##----------------------------------------------------------------
-## Helper function to Calculate weighted means for multiple columns within grouped strata.
+## 0.2 Helper function to Calculate weighted means for multiple columns within grouped strata.
 ##----------------------------------------------------------------
 #' @param df         Input dataframe.
 #' @param group_cols Character vector of columns to group by (strata).
@@ -142,6 +142,7 @@ summary_table <- df_adj_ss %>%
   group_by(acause_lvl2, has_hiv, has_sud, has_hepc, race_cd, toc, age_group_years_start, year_id, file_type) %>%
   summarise(
     avg_cost_per_bene = weighted.mean(avg_cost_per_bene, n_benes_per_group, na.rm = TRUE),
+    avg_cost_per_encounter = weighted.mean(avg_cost_per_encounter, n_benes_per_group, na.rm = TRUE),
     avg_cost_per_bene_winsorized = weighted.mean(avg_cost_per_bene_winsorized, n_benes_per_group, na.rm = TRUE),
     max_cost_per_bene = max(max_cost_per_bene, na.rm = TRUE),
     quantile_99_cost_per_bene = weighted.mean(quantile_99_cost_per_bene, n_benes_per_group, na.rm = TRUE),
@@ -209,15 +210,115 @@ write_csv(by_cause_year_ss, file.path(output_folder, "01.Summary_Statistics_subt
 cat("All descriptive summary subtables have been saved to CSV in", output_folder, "\n")
 
 
+
+##----------------------------------------------------------------
+## 2. Aggregate & Summarize - 02.Regression_Estimates (streaming, no parallel)
+##----------------------------------------------------------------
+###TRY THIS BELOW IF NOT THE COMMENTED CODE BELOW SHOULD WORK 
+# # Files (recursive under input_regression_estimates)
+# files_list_re <- list.files(
+#   input_regression_estimates,
+#   pattern = "\\.csv$",
+#   full.names = TRUE,
+#   recursive = TRUE
+# )
+# stopifnot(length(files_list_re) > 0)
+# 
+# # If you can filter by path (to skip irrelevant years/ages), do it here, e.g.:
+# # files_list_re <- grep("/y2016/|/year_2016/", files_list_re, value = TRUE)
+# 
+# # Columns to keep (exactly these 11)
+# cols_needed <- c(
+#   "variable",
+#   "estimate_logit",
+#   "p_logit",
+#   "estimate_gamma",
+#   "p_gamma",
+#   "interaction_dropped",
+#   "year_id",
+#   "file_type",
+#   "age_group_years_start",
+#   "bootstrap_number",
+#   "cause_name"
+# )
+# 
+# # Type “hints” (used when we coerce missing columns we create)
+# col_classes <- list(
+#   character = c("variable", "file_type", "cause_name"),
+#   integer   = c("year_id", "age_group_years_start", "bootstrap_number"),
+#   numeric   = c("estimate_logit", "p_logit", "estimate_gamma", "p_gamma"),
+#   logical   = c("interaction_dropped")
+# )
+# 
+# # Safe reader that (1) selects 11 columns, (2) adds any missing ones as NA of correct type
+# safe_read_one <- function(f) {
+#   DT <- tryCatch(
+#     data.table::fread(f, select = cols_needed, showProgress = FALSE),
+#     error = function(e) data.table::data.table()  # skip unreadable files but keep going
+#   )
+#   # Add any missing columns
+#   missing <- setdiff(cols_needed, names(DT))
+#   if (length(missing)) {
+#     for (m in missing) {
+#       # pick type for the missing column
+#       if (m %in% col_classes$character) DT[, (m) := NA_character_]
+#       else if (m %in% col_classes$integer) DT[, (m) := as.integer(NA)]
+#       else if (m %in% col_classes$numeric) DT[, (m) := as.numeric(NA)]
+#       else if (m %in% col_classes$logical) DT[, (m) := as.logical(NA)]
+#       else DT[, (m) := NA]  # fallback
+#     }
+#   }
+#   # Enforce column order
+#   data.table::setcolorder(DT, cols_needed)
+#   DT
+# }
+# 
+# # Output
+# output_file_re <- file.path(output_folder, "02.Regression_Estimates_aggregated.csv")
+# if (file.exists(output_file_re)) file.remove(output_file_re)
+# 
+# # Tune batch size based on your filesystem; 500–2000 is usually good on IHME
+# batch_size <- 1000L
+# n <- length(files_list_re)
+# first_batch <- TRUE
+# 
+# pb <- txtProgressBar(min = 0, max = n, style = 3)
+# for (i in seq(1L, n, by = batch_size)) {
+#   j <- min(i + batch_size - 1L, n)
+#   batch <- files_list_re[i:j]
+#   
+#   # read -> combine -> write (append)
+#   ll <- lapply(batch, safe_read_one)
+#   DT <- data.table::rbindlist(ll, use.names = TRUE, fill = TRUE)
+#   
+#   # write header only once
+#   data.table::fwrite(
+#     DT,
+#     file = output_file_re,
+#     append = !first_batch,
+#     col.names = first_batch
+#   )
+#   first_batch <- FALSE
+#   
+#   # clean up
+#   rm(ll, DT); gc()
+#   setTxtProgressBar(pb, j)
+# }
+# close(pb)
+# 
+# cat("Regression estimates table saved:", output_file_re, "\n")
+
+
 ##----------------------------------------------------------------
 ## 2. Aggregate & Summarize - 02.Regression_Estimates
 ##----------------------------------------------------------------
 
+####
 
 # Files (recursive under input_regression_estimates)
 files_list_re <- list.files(
   input_regression_estimates,
-  pattern = "\\.csv$",
+  pattern = "\\.parquet$",
   full.names = TRUE,
   recursive = TRUE
 )
@@ -246,11 +347,13 @@ col_classes <- list(
   logical   = c("interaction_dropped")
 )
 
-# Read and stack
-read_one <- function(f) {
-  fread(f, select = cols_needed, colClasses = col_classes, showProgress = FALSE)
-}
-df_input_re <- rbindlist(lapply(files_list_re, read_one), use.names = TRUE, fill = TRUE)
+df_input_re <- open_dataset(files_list_re, format = "parquet")
+
+# select only needed columns, then collect to RAM
+df_input_re <- df_input_re %>%
+  select(all_of(cols_needed)) %>%
+  collect() %>%
+  as.data.table()
 
 # Ensure column order and write
 setcolorder(df_input_re, cols_needed)
@@ -258,21 +361,6 @@ setcolorder(df_input_re, cols_needed)
 output_file_re <- file.path(output_folder, "02.Regression_Estimates_aggregated.csv")
 fwrite(df_input_re, output_file_re)
 cat("Regression estimates table saved:", output_file_re, "\n")
-
-
-
-# ####OLD REGRD code below
-# 
-# # Get the list of all CSV files from the input directory
-# files_list_re <- list.files(input_regression_estimates, pattern = "\\.csv$", full.names = TRUE) 
-# 
-# # Read and combine all files into a single dataframe
-# df_input_re <- purrr::map_dfr(files_list_re, ~readr::read_csv(.x, show_col_types = FALSE))
-# 
-# # Save the aggregated Regression Estimates as CSV
-# output_file_re <- file.path(output_folder, "02.Regression_Estimates_aggregated.csv")
-# write_csv(df_input_re, output_file_re)
-# cat("Regression estimates table saved:", output_file_re, "\n")
 
 ##----------------------------------------------------------------
 ## 2.1 Regression Subtables

@@ -9,7 +9,7 @@
 # 0. Setup environment
 ##########################################################################
 rm(list = ls())
-pacman::p_load(ggplot2, readr, tidyverse, viridis, scales, ggsci,viridis, plotly, htmlwidgets) 
+pacman::p_load(ggplot2, readr, tidyverse, viridis, scales, ggsci,viridis, plotly, htmlwidgets,data.table) 
 
 
 # Set the current date for folder naming
@@ -18,8 +18,9 @@ date_today <- format(Sys.time(), "%Y%m%d")
 # Detect IHME cluster by checking for /mnt/share/limited_use
 if (dir.exists("/mnt/share/limited_use")) {
   # IHME/cluster environment
+  date_of_input <- "20250910"
   base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/"
-  input_dir <- file.path(base_dir, "05.Aggregation_Summary", "bested")
+  input_dir <- file.path(base_dir, "05.Aggregation_Summary", date_of_input)
   figures_dir <- file.path(base_dir, "06.Figures")
   # (add your other cluster-specific library loads here)
 } else {
@@ -554,6 +555,7 @@ save_plot(F10, "F10.Aim1c_percent_HIV_spending_by_age.png")
 # 1.31 Figure 11 - Average Cost per Beneficiary Over Time by Disease (with CI)
 ##########################################################################
 
+
 F11 <- df_master %>%
   filter(!is.na(year_id), !is.na(cause_name_lvl2)) %>%
   group_by(year_id, cause_name_lvl2) %>%
@@ -580,7 +582,12 @@ F11 <- df_master %>%
     x = "Year", y = "Mean Cost (USD)", color = "Disease", fill = "Disease"
   ) +
   theme_minimal(base_size = 13) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "bottom",
+    legend.box = "horizontal"
+  )
+
 
 save_plot(F11,
           "F11.Aim1c_mean_costs_over_time_by_disease.png")
@@ -733,7 +740,7 @@ plot_sud_vs_hiv_sud <- ggplot(
 save_plot(plot_sud_vs_hiv_sud, "F13.Aim1a_SUD_vs_SUD_HIV.png")
 
 ##########################################################################
-# Figure 15: Using SS plot spending by disease over years to investigate 2016 drop
+# Figure 15: Using SS plot spending by disease over years to investigate 2016 drop (per beneficiary)
 # Rows = years, columns = diseases (neither, hiv, sud, hiv+sud, so four lines total), all age groups, all races, all sexes combined
 ##########################################################################
 
@@ -805,5 +812,162 @@ p15 <- ggplot(df_f15_long, aes(x = Year, y = cost_usd, color = cost_type, group 
 
 p15_plotly <- ggplotly(p15, tooltip = c("Year", "cost_usd", "cost_type", "Level 2 Cause"))
 
-saveWidget(p15_plotly, file.path(output_dir, "F15.SS_2016_drop.html"), selfcontained = TRUE)
+saveWidget(p15_plotly, file.path(output_dir, "F15.SS_2016_per_bene_drop.html"), selfcontained = TRUE)
 
+
+
+##########################################################################
+# Figure 16: Using MODELED results to plot spending by disease over years
+# Rows = years, columns = diseases (Mean, HIV, SUD, HIV + SUD lines), 
+# all age groups, all races, all sexes combined
+##########################################################################
+
+
+# 1) Group to get weighted means across strata (age/race/sex), by cause & year
+df_f16 <- df_master %>%
+  filter(!is.na(year_id), !is.na(cause_name_lvl2)) %>%
+  group_by(cause_name_lvl2, year_id) %>%
+  summarise(
+    mean_cost_mean     = weighted.mean(mean_cost,         w = total_row_count, na.rm = TRUE),
+    mean_cost_hiv      = weighted.mean(mean_cost_hiv,     w = total_row_count, na.rm = TRUE),
+    mean_cost_sud      = weighted.mean(mean_cost_sud,     w = total_row_count, na.rm = TRUE),
+    mean_cost_hiv_sud  = weighted.mean(mean_cost_hiv_sud, w = total_row_count, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 2) Rename to match Figure 15 pattern and prepare for pivoting
+df_f16 <- df_f16 %>%
+  rename(`Level 2 Cause` = cause_name_lvl2,
+         Year            = year_id) %>%
+  # wide with readable column names like in Fig 15
+  mutate(.keep = "all") %>%
+  tidyr::pivot_longer(
+    cols = c(mean_cost_mean, mean_cost_sud, mean_cost_hiv, mean_cost_hiv_sud),
+    names_to = "which",
+    values_to = "val"
+  ) %>%
+  mutate(which = recode(which,
+                        "mean_cost_mean"    = "Mean Cost Model",
+                        "mean_cost_sud"     = "SUD Cost Model",
+                        "mean_cost_hiv"     = "HIV Cost Model",
+                        "mean_cost_hiv_sud" = "HIV + SUD Cost Model")) %>%
+  tidyr::pivot_wider(
+    id_cols = c(`Level 2 Cause`, Year),
+    names_from = which,
+    values_from = val
+  )
+
+# 3) Convert to dollars (string) to mirror Fig 15, then parse back for plotting
+for (col in colnames(df_f16)) {
+  if (col %in% c("Level 2 Cause", "Year")) next
+  df_f16[[col]] <- dollar(df_f16[[col]])
+}
+
+# 4) Pivot long for plot (exactly like Fig 15)
+df_f16_long <- df_f16 %>%
+  mutate(
+    `Mean Cost Model`      = parse_number(`Mean Cost Model`),
+    `SUD Cost Model`       = parse_number(`SUD Cost Model`),
+    `HIV Cost Model`       = parse_number(`HIV Cost Model`),
+    `HIV + SUD Cost Model` = parse_number(`HIV + SUD Cost Model`)
+  ) %>%
+  pivot_longer(
+    cols = c(`Mean Cost Model`, `SUD Cost Model`, `HIV Cost Model`, `HIV + SUD Cost Model`),
+    names_to = "cost_type",
+    values_to = "cost_usd"
+  ) %>%
+  mutate(
+    cost_type = recode(cost_type,
+                       `Mean Cost Model`      = "Mean",
+                       `SUD Cost Model`       = "SUD",
+                       `HIV Cost Model`       = "HIV",
+                       `HIV + SUD Cost Model` = "HIV + SUD")
+  )
+
+# 5) Plot (same aesthetics as Fig 15; no ribbons)
+p16 <- ggplot(df_f16_long, aes(x = Year, y = cost_usd, color = cost_type, group = cost_type)) +
+  geom_line() +
+  geom_point(size = 1) +
+  facet_wrap(vars(`Level 2 Cause`), scales = "free_y") +
+  scale_y_continuous(labels = scales::dollar) +
+  labs(x = "Year", y = "Cost (USD)", color = "Cost Type") +
+  theme_minimal(base_size = 12)
+
+p16_plotly <- ggplotly(p16, tooltip = c("Year", "cost_usd", "cost_type", "Level 2 Cause"))
+
+saveWidget(p16_plotly, file.path(output_dir, "F16.MODELED_2016_drop.html"), selfcontained = TRUE)
+
+##########################################################################
+# Figure 17: Using SS plot spending by disease over years to investigate 2016 drop (per encounter)
+# Rows = years, columns = diseases (neither, hiv, sud, hiv+sud, so four lines total), all age groups, all races, all sexes combined
+##########################################################################
+
+# Load SS data
+df_f17 <- read.csv(file = file.path(input_dir, "01.Summary_Statistics_inflation_adjusted_aggregated.csv"))
+
+# Group by summary to get mean_cost for all races all years all age groups
+df_f17 <- df_f17 %>%
+  group_by(acause_lvl2, year_id, has_hiv, has_sud) %>%
+  summarise(
+    mean_cost = weighted.mean(avg_cost_per_bene, w = total_unique_bene, na.rm = TRUE)
+  )
+
+# Merge with mapping table for cause names
+df_f17 <- left_join(x = df_f17, y = df_map, by = "acause_lvl2") %>%
+  ungroup() %>%
+  select(-c("acause_lvl2", "acause_lvl1", "cause_name_lvl1"))
+
+# Pivot wider
+df_f17 <- df_f17 %>%
+  mutate(combo = paste0(has_hiv, has_sud)) %>%   # e.g. 00, 01, 10, 11
+  pivot_wider(
+    id_cols = c(cause_name_lvl2, year_id),                   # what stays as identifier
+    names_from = combo,                          # new column names from combos
+    values_from = mean_cost                      # values to spread
+  ) %>%
+  setnames(old = c("cause_name_lvl2", "year_id", "00", "01", "10", "11"),
+           new = c("Level 2 Cause", "Year","Mean Cost Summary", "SUD Cost Summary", "HIV Cost Summary", "HIV + SUD Cost Summary"))
+
+# Convert to dollars
+for (col in colnames(df_f17)) {
+  if (col == "Level 2 Cause" | col == "Year") {
+    next
+  } else {
+    df_f17[[col]] <- dollar(df_f17[[col]])
+  }
+}
+
+# Pivot long for plot
+df_f17_long <- df_f17 %>%
+  mutate(
+    `Mean Cost Summary`      = parse_number(`Mean Cost Summary`),
+    `SUD Cost Summary`       = parse_number(`SUD Cost Summary`),
+    `HIV Cost Summary`       = parse_number(`HIV Cost Summary`),
+    `HIV + SUD Cost Summary` = parse_number(`HIV + SUD Cost Summary`)
+  ) %>%
+  pivot_longer(
+    cols = c(`Mean Cost Summary`, `SUD Cost Summary`, `HIV Cost Summary`, `HIV + SUD Cost Summary`),
+    names_to = "cost_type",
+    values_to = "cost_usd"
+  ) %>%
+  mutate(
+    cost_type = recode(cost_type,
+                       `Mean Cost Summary`      = "Mean",
+                       `SUD Cost Summary`       = "SUD",
+                       `HIV Cost Summary`       = "HIV",
+                       `HIV + SUD Cost Summary` = "HIV + SUD"
+    )
+  )
+
+# Make a ggplot and convert to plotly
+p15 <- ggplot(df_f17_long, aes(x = Year, y = cost_usd, color = cost_type, group = cost_type)) +
+  geom_line() +
+  geom_point(size = 1) +
+  facet_wrap(vars(`Level 2 Cause`), scales = "free_y") +
+  scale_y_continuous(labels = scales::dollar) +
+  labs(x = "Year", y = "Cost (USD)", color = "Cost Type") +
+  theme_minimal(base_size = 12)
+
+p15_plotly <- ggplotly(p15, tooltip = c("Year", "cost_usd", "cost_type", "Level 2 Cause"))
+
+saveWidget(p15_plotly, file.path(output_dir, "F15.SS_2016_per_bene_drop.html"), selfcontained = TRUE)
