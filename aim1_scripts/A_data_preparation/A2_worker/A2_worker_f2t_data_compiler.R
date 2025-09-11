@@ -38,7 +38,7 @@ if (interactive()) {
   unique_years <- unique(df_params$year_id)
   
   # select year to read in data from
-  data_year <- unique_years[4] # can set this to 2010, 2011, etc. for any particular year of interest
+  data_year <- unique_years[5] # can set this to 2010, 2011, etc. for any particular year of interest
 
 } else { 
   # Read in args from SUBMIT_ARRAY_JOBS(), read in .csv containing permutations, subset to rows based on year
@@ -77,6 +77,7 @@ for (i in 1:nrow(data_dirs)) {
   
   # read in dataset
   dt <- open_dataset(dir) %>%
+    filter(mc_ind == 0L) %>%
     select(bene_id, encounter_id, acause, primary_cause, race_cd, sex_id, tot_pay_amt, st_resi) %>%
     collect() %>%
     as.data.frame()

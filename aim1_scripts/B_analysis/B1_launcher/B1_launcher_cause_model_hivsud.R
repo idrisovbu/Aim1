@@ -23,7 +23,7 @@ if (Sys.info()["sysname"] == 'Linux'){
 ##----------------------------------------------------------------
 ## 1) Build parameters table: (file x cause) rows
 ##----------------------------------------------------------------
-run_date <- "20250909 - IP"
+run_date <- "bested"
 fp_input_data <- file.path(l, "LU_CMS/DEX/hivsud/aim1/A_data_preparation", run_date, "aggregated_by_year")
 
 input_files <- list.files(fp_input_data, pattern = "\\.parquet$", full.names = TRUE)
@@ -34,8 +34,8 @@ df_files <- data.frame(directory = input_files) %>%
     year_id   = as.numeric(str_extract(basename(directory), "(?<=data_)\\d{4}")),
     age_group_years_start = as.numeric(str_extract(basename(directory), "(?<=_age)\\d+"))
   ) %>%
-  filter(!is.na(year_id)) #%>%
-  #filter(year_id %in% c(2000, 2010, 2014, 2015, 2016, 2019))
+  filter(!is.na(year_id)) %>%
+  filter(year_id %in% c(2010, 2014, 2015, 2016, 2019))
 
 # Define causes to run (safe to hardcode; worker will skip if absent)
 causes_to_run <- c(
@@ -67,7 +67,7 @@ dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
 
 
 bootstrap_iterations_F2T <- 8
-bootstrap_iterations_RX  <- 50
+bootstrap_iterations_RX  <- 8
 
 #### was running 1 hour with these specs. 
 

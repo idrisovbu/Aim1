@@ -39,7 +39,7 @@ if (Sys.info()["sysname"] == 'Linux'){
 ## 1. Create parameters CSV file
 ##----------------------------------------------------------------
 # Input location (adjust date as needed based on the run date)
-run_date <- "20250909" # bested was 20250620 (update as needed)
+run_date <- "bested" # bested was 20250620 (update as needed)
 fp_input_data <- file.path(l, "LU_CMS/DEX/hivsud/aim1/A_data_preparation", run_date, "aggregated_by_year")
 
 # List all .parquet files
@@ -52,7 +52,7 @@ df_params <- data.frame(directory = input_files) %>%
     year_id = as.numeric(sub(".*_(\\d{4})_age\\d+\\.parquet$", "\\1", basename(directory)))
     ) %>%   
   filter(!is.na(year_id)) %>%
-  filter(year_id %in% c(2000, 2010, 2014, 2015, 2016, 2019)) #%>% # 2000, 2010, 2014, 2015, 2016, 2019 -> These years have the full data for all types of care (excl. RX)
+  filter(year_id %in% c(2010, 2014, 2015, 2016, 2019)) #%>% # 2010, 2014, 2015, 2016, 2019 -> These years have the full data for all types of care (excl. RX)
 #filter(file_type == "RX")  ### remove after run
 
 # Manual df_params override for re-running particular jobs
@@ -93,6 +93,8 @@ jid <- SUBMIT_ARRAY_JOB(
   archive = FALSE,
   test = F  # T for Testing, F (false) for Full run
 )
+
+cat("Submitted", nrow(df_params), "array tasks.\n")
 
 #######################################################
 # 

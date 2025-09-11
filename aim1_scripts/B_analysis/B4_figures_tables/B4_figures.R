@@ -18,7 +18,7 @@ date_today <- format(Sys.time(), "%Y%m%d")
 # Detect IHME cluster by checking for /mnt/share/limited_use
 if (dir.exists("/mnt/share/limited_use")) {
   # IHME/cluster environment
-  date_of_input <- "20250910"
+  date_of_input <- "bested"
   base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/"
   input_dir <- file.path(base_dir, "05.Aggregation_Summary", date_of_input)
   figures_dir <- file.path(base_dir, "06.Figures")
@@ -960,7 +960,7 @@ df_f17_long <- df_f17 %>%
   )
 
 # Make a ggplot and convert to plotly
-p15 <- ggplot(df_f17_long, aes(x = Year, y = cost_usd, color = cost_type, group = cost_type)) +
+p17 <- ggplot(df_f17_long, aes(x = Year, y = cost_usd, color = cost_type, group = cost_type)) +
   geom_line() +
   geom_point(size = 1) +
   facet_wrap(vars(`Level 2 Cause`), scales = "free_y") +
@@ -968,6 +968,6 @@ p15 <- ggplot(df_f17_long, aes(x = Year, y = cost_usd, color = cost_type, group 
   labs(x = "Year", y = "Cost (USD)", color = "Cost Type") +
   theme_minimal(base_size = 12)
 
-p15_plotly <- ggplotly(p15, tooltip = c("Year", "cost_usd", "cost_type", "Level 2 Cause"))
+p17_plotly <- ggplotly(p17, tooltip = c("Year", "cost_usd", "cost_type", "Level 2 Cause"))
 
-saveWidget(p15_plotly, file.path(output_dir, "F15.SS_2016_per_bene_drop.html"), selfcontained = TRUE)
+saveWidget(p17_plotly, file.path(output_dir, "F17.SS_2016_per_encounter_drop.html"), selfcontained = TRUE)
