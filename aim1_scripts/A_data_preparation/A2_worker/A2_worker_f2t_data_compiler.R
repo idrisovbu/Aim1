@@ -38,7 +38,7 @@ if (interactive()) {
   unique_years <- unique(df_params$year_id)
   
   # select year to read in data from
-  data_year <- unique_years[5] # can set this to 2010, 2011, etc. for any particular year of interest
+  data_year <- unique_years[3] # can set this to 2010, 2011, etc. for any particular year of interest
 
 } else { 
   # Read in args from SUBMIT_ARRAY_JOBS(), read in .csv containing permutations, subset to rows based on year
@@ -56,6 +56,7 @@ if (interactive()) {
   # select year to read in data from
   data_year <- unique_years[as.numeric(array_job_number)] 
 }
+
 
 # --- Initialize output list ---
 df_list <- list()
@@ -76,11 +77,30 @@ for (i in 1:nrow(data_dirs)) {
   start <- Sys.time()
   
   # read in dataset
+  # dt <- open_dataset(dir) %>%
+  #   filter(ENHANCED_FIVE_PERCENT_FLAG == "Y") %>% # Filters on 5% random sample column
+  #   filter(pri_payer == "1") %>%
+  #   filter(mc_ind == "0L") %>%
+  #   select(bene_id, encounter_id, acause, primary_cause, race_cd, sex_id, tot_pay_amt, st_resi) %>%
+  #   collect() %>%
+  #   as.data.frame()
+  
+  # read in dataset
+
+  cols <- c(
+    "bene_id","encounter_id","acause","primary_cause","race_cd","sex_id",
+    "tot_pay_amt","st_resi","ENHANCED_FIVE_PERCENT_FLAG","pri_payer","mc_ind"
+  )
+  
   dt <- open_dataset(dir) %>%
-    filter(mc_ind == 0L) %>%
-    select(bene_id, encounter_id, acause, primary_cause, race_cd, sex_id, tot_pay_amt, st_resi) %>%
-    collect() %>%
-    as.data.frame()
+    select(all_of(cols)) %>%
+    filter(mc_ind == 0L) %>%           # numeric filter pushed down
+    collect() %>%                      # pull to R
+    filter(ENHANCED_FIVE_PERCENT_FLAG == "Y") %>%  # do string filter in-memory
+    mutate(pri_payer = suppressWarnings(as.integer(pri_payer))) %>%  # coerce if needed
+    filter(pri_payer == 1L) %>%
+    select(bene_id, encounter_id, acause, primary_cause, race_cd, sex_id, tot_pay_amt, st_resi)
+  
     
   # Add metadata based on path
   dt$toc <- row$toc
@@ -211,4 +231,8 @@ for (ag in unique_age_groups) {
   write_parquet(df_age, fpath)
   message("Saved: ", fpath)
 }
+
+
+
+####delete after
 

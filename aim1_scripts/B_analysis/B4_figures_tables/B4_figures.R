@@ -18,7 +18,7 @@ date_today <- format(Sys.time(), "%Y%m%d")
 # Detect IHME cluster by checking for /mnt/share/limited_use
 if (dir.exists("/mnt/share/limited_use")) {
   # IHME/cluster environment
-  date_of_input <- "bested"
+  date_of_input <- "bested" # last run on 20250914
   base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/"
   input_dir <- file.path(base_dir, "05.Aggregation_Summary", date_of_input)
   figures_dir <- file.path(base_dir, "06.Figures")
@@ -971,3 +971,4 @@ p17 <- ggplot(df_f17_long, aes(x = Year, y = cost_usd, color = cost_type, group 
 p17_plotly <- ggplotly(p17, tooltip = c("Year", "cost_usd", "cost_type", "Level 2 Cause"))
 
 saveWidget(p17_plotly, file.path(output_dir, "F17.SS_2016_per_encounter_drop.html"), selfcontained = TRUE)
+

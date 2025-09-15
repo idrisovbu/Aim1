@@ -94,14 +94,37 @@ for (i in 1:nrow(data_dirs)) {
   start <- Sys.time()
   
   # Read in data
+  # dt <- open_dataset(dir) %>%
+  #   filter(ENHANCED_FIVE_PERCENT_FLAG == "Y") %>% # Filters on 5% random sample column
+  #   filter(mc_ind == 0L) %>%
+  #   select(bene_id, acause, primary_cause, race_cd, tot_chg_amt) %>%
+  #   collect() %>%
+  #   as.data.table()
+  
+  
+  # -----
+  cols <- c(
+    "bene_id","claim_id","acause","primary_cause","race_cd",
+    "tot_chg_amt","ENHANCED_FIVE_PERCENT_FLAG","pri_payer","mc_ind"
+  )
+  
   dt <- open_dataset(dir) %>%
-    filter(ENHANCED_FIVE_PERCENT_FLAG == "Y") %>% # Filters on 5% random sample column
-    select(bene_id, acause, primary_cause, race_cd, tot_chg_amt) %>%
-    collect() %>%
+    select(all_of(cols)) %>%
+    filter(mc_ind == 0L) %>%            # pushdown
+    collect() %>%                       # to R
     as.data.table()
   
-  # Rename columns
-  setnames(dt, "tot_chg_amt", "tot_pay_amt")
+  # filter in DT
+  dt <- dt[ENHANCED_FIVE_PERCENT_FLAG == "Y" &
+             suppressWarnings(as.integer(pri_payer)) == 1L]
+  
+  # keep only what we need
+  dt <- dt[, .(bene_id, claim_id, acause, primary_cause, race_cd, tot_chg_amt)]
+  
+  # rename once (no duplicates)
+  setnames(dt, old = c("claim_id", "tot_chg_amt"),
+           new = c("encounter_id", "tot_pay_amt"))
+  
   
   # Add metadata from folder structure
   dt[, `:=`(
@@ -213,4 +236,5 @@ for (i in 1:nrow(data_dirs)) {
   message("Done in: ", Sys.time() - start)
   rm(dt, collapsed); gc()
 }
+
   

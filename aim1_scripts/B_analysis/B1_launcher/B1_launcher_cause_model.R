@@ -22,7 +22,8 @@ if (Sys.info()["sysname"] == 'Linux'){
 ##----------------------------------------------------------------
 ## 1) Build parameters table: (file x cause) rows
 ##----------------------------------------------------------------
-run_date <- "bested"
+run_date <- "bested" #last run on 20250914
+
 fp_input_data <- file.path(l, "LU_CMS/DEX/hivsud/aim1/A_data_preparation", run_date, "aggregated_by_year")
 
 input_files <- list.files(fp_input_data, pattern = "\\.parquet$", full.names = TRUE)
