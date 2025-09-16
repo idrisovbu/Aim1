@@ -123,3 +123,5 @@ jid <- SUBMIT_ARRAY_JOB(
   archive = FALSE,
   test = F # F = Full Run, T = Test Run (only run the first job in a batch)
 )
+
+cat("Submitted", nrow(df_list_input_unique_combinations), "array tasks.\n")

@@ -125,3 +125,4 @@ jid <- SUBMIT_ARRAY_JOB(
   test = F # F = Full Run, T = Test Run (only run the first job in a batch)
 )
 
+cat("Submitted", length(unique(df_list_input_data_subset$year_id)), "array tasks.\n")

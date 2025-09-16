@@ -77,30 +77,13 @@ for (i in 1:nrow(data_dirs)) {
   start <- Sys.time()
   
   # read in dataset
-  # dt <- open_dataset(dir) %>%
-  #   filter(ENHANCED_FIVE_PERCENT_FLAG == "Y") %>% # Filters on 5% random sample column
-  #   filter(pri_payer == "1") %>%
-  #   filter(mc_ind == "0L") %>%
-  #   select(bene_id, encounter_id, acause, primary_cause, race_cd, sex_id, tot_pay_amt, st_resi) %>%
-  #   collect() %>%
-  #   as.data.frame()
-  
-  # read in dataset
-
-  cols <- c(
-    "bene_id","encounter_id","acause","primary_cause","race_cd","sex_id",
-    "tot_pay_amt","st_resi","ENHANCED_FIVE_PERCENT_FLAG","pri_payer","mc_ind"
-  )
-  
   dt <- open_dataset(dir) %>%
-    select(all_of(cols)) %>%
-    filter(mc_ind == 0L) %>%           # numeric filter pushed down
-    collect() %>%                      # pull to R
-    filter(ENHANCED_FIVE_PERCENT_FLAG == "Y") %>%  # do string filter in-memory
-    mutate(pri_payer = suppressWarnings(as.integer(pri_payer))) %>%  # coerce if needed
-    filter(pri_payer == 1L) %>%
-    select(bene_id, encounter_id, acause, primary_cause, race_cd, sex_id, tot_pay_amt, st_resi)
-  
+    filter(ENHANCED_FIVE_PERCENT_FLAG == "Y") %>% # Filters on 5% random sample column
+    filter(pri_payer == 1) %>%
+    filter(mc_ind == 0) %>%
+    select(bene_id, encounter_id, acause, primary_cause, race_cd, sex_id, tot_pay_amt, st_resi) %>%
+    collect() %>%
+    as.data.frame()
     
   # Add metadata based on path
   dt$toc <- row$toc
@@ -198,17 +181,45 @@ df <- df[, .(
           year_id, age_group_years_start, toc, race_cd, sex_id)]
 
 
-
 desired_order <- c("bene_id", "st_resi", "acause_lvl2", "acause_lvl1", "cause_name_lvl1", "cause_name_lvl2",
                    "year_id", "age_group_years_start", "race_cd", "sex_id", "toc",
                    "has_hiv", "has_sud", "has_hepc", "has_cost", "unique_encounters", "tot_pay_amt")
 
 setcolorder(df, intersect(desired_order, names(df)))
 
+##----------------------------------------------------------------
+## 5. Add binary disease flag columns and unique disease count column per grouped bene
+##----------------------------------------------------------------
+cause_list <- c("_enteric_all","_infect","_intent","_mental","_neo","_neuro",
+  "_ntd","_otherncd","_rf","_ri","_sense","_subs","_unintent","_well","cvd","diab_ckd",
+  "digest","hiv","inj_trans","mater_neonat","msk","nutrition","resp", "skin", "std")
 
-# ##----------------------------------------------------------------
-# ## 4. Write to parquet file
-# ##----------------------------------------------------------------
+# Create matrix of binary values for unique bene x has_<cause>
+df_cause_flags <- df %>%
+  mutate(cause = acause_lvl2) %>%
+  distinct(bene_id, cause) %>%              # one cause per patient
+  mutate(flag = 1L, cause = paste0("has_", cause)) %>%
+  pivot_wider(names_from = cause, values_from = flag, values_fill = 0)
+
+# Force missing columns to exist if they don't
+expected <- paste0("has_", cause_list)
+missing  <- setdiff(expected, names(df_cause_flags))
+df_cause_flags[missing] <- 0L
+
+# Remove "has_hiv" & "has_sud"
+df_cause_flags <- df_cause_flags %>%
+  select(-c("has_hiv", "has__subs"))
+
+# Create row count (disease count #)
+df_cause_flags <- df_cause_flags %>%
+  mutate(cause_count = rowSums(across(colnames(df_cause_flags)[-1])))
+
+# Join data back with main df
+df <- df %>% left_join(df_cause_flags, by = "bene_id")
+
+##----------------------------------------------------------------
+## 6. Write to parquet file
+##----------------------------------------------------------------
 
 # Define base output directory
 base_output_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation"
@@ -217,6 +228,7 @@ output_folder <- file.path(base_output_dir, date_folder)
 
 # Subfolder for final yearly f2t datasets
 compiled_dir <- file.path(output_folder, "aggregated_by_year")
+
 # Create directories if they don't exist
 dir.create(compiled_dir, recursive = TRUE, showWarnings = FALSE)
 
@@ -231,8 +243,4 @@ for (ag in unique_age_groups) {
   write_parquet(df_age, fpath)
   message("Saved: ", fpath)
 }
-
-
-
-####delete after
 

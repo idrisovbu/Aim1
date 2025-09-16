@@ -18,7 +18,7 @@ date_today <- format(Sys.time(), "%Y%m%d")
 # Detect IHME cluster by checking for /mnt/share/limited_use
 if (dir.exists("/mnt/share/limited_use")) {
   # IHME/cluster environment
-  date_of_input <- "bested" # last run on 20250914
+  date_of_input <- "20250914" # last run on 20250914
   base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/"
   input_dir <- file.path(base_dir, "05.Aggregation_Summary", date_of_input)
   figures_dir <- file.path(base_dir, "06.Figures")
@@ -909,7 +909,7 @@ df_f17 <- read.csv(file = file.path(input_dir, "01.Summary_Statistics_inflation_
 df_f17 <- df_f17 %>%
   group_by(acause_lvl2, year_id, has_hiv, has_sud) %>%
   summarise(
-    mean_cost = weighted.mean(avg_cost_per_bene, w = total_unique_bene, na.rm = TRUE)
+    mean_cost = weighted.mean(avg_cost_per_encounter, w = total_unique_bene, na.rm = TRUE)
   )
 
 # Merge with mapping table for cause names

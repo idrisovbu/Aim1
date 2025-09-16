@@ -94,37 +94,17 @@ for (i in 1:nrow(data_dirs)) {
   start <- Sys.time()
   
   # Read in data
-  # dt <- open_dataset(dir) %>%
-  #   filter(ENHANCED_FIVE_PERCENT_FLAG == "Y") %>% # Filters on 5% random sample column
-  #   filter(mc_ind == 0L) %>%
-  #   select(bene_id, acause, primary_cause, race_cd, tot_chg_amt) %>%
-  #   collect() %>%
-  #   as.data.table()
-  
-  
-  # -----
-  cols <- c(
-    "bene_id","claim_id","acause","primary_cause","race_cd",
-    "tot_chg_amt","ENHANCED_FIVE_PERCENT_FLAG","pri_payer","mc_ind"
-  )
-  
   dt <- open_dataset(dir) %>%
-    select(all_of(cols)) %>%
-    filter(mc_ind == 0L) %>%            # pushdown
-    collect() %>%                       # to R
+    filter(ENHANCED_FIVE_PERCENT_FLAG == "Y") %>% # Filters on 5% random sample column
+    filter(mc_ind == 0L) %>%
+    filter(pri_payer == 1) %>%
+    select(bene_id, claim_id, acause, primary_cause, race_cd, tot_chg_amt) %>%
+    collect() %>%
     as.data.table()
-  
-  # filter in DT
-  dt <- dt[ENHANCED_FIVE_PERCENT_FLAG == "Y" &
-             suppressWarnings(as.integer(pri_payer)) == 1L]
-  
-  # keep only what we need
-  dt <- dt[, .(bene_id, claim_id, acause, primary_cause, race_cd, tot_chg_amt)]
   
   # rename once (no duplicates)
   setnames(dt, old = c("claim_id", "tot_chg_amt"),
            new = c("encounter_id", "tot_pay_amt"))
-  
   
   # Add metadata from folder structure
   dt[, `:=`(
@@ -210,10 +190,39 @@ for (i in 1:nrow(data_dirs)) {
                      "year_id", "age_group_years_start", "race_cd", "sex_id", "toc",
                      "has_hiv", "has_sud", "has_hepc", "has_cost", "unique_encounters", "tot_pay_amt")
   setcolorder(collapsed, intersect(desired_order, names(collapsed)))
-
   
   ##----------------------------------------------------------------
-  ## 4. Save as chunk
+  ## 4. Add binary disease flag columns and unique disease count column per grouped bene
+  ##----------------------------------------------------------------
+  cause_list <- c("_enteric_all","_infect","_intent","_mental","_neo","_neuro",
+                  "_ntd","_otherncd","_rf","_ri","_sense","_subs","_unintent","_well","cvd","diab_ckd",
+                  "digest","hiv","inj_trans","mater_neonat","msk","nutrition","resp", "skin", "std")
+  
+  # Create matrix of binary values for unique bene x has_<cause>
+  df_cause_flags <- dt %>%
+    mutate(cause = acause_lvl2) %>%
+    distinct(bene_id, cause) %>%              # one cause per patient
+    mutate(flag = 1L, cause = paste0("has_", cause)) %>%
+    pivot_wider(names_from = cause, values_from = flag, values_fill = 0)
+  
+  # Force missing columns to exist if they don't
+  expected <- paste0("has_", cause_list)
+  missing  <- setdiff(expected, names(df_cause_flags))
+  df_cause_flags[missing] <- 0L
+  
+  # Remove "has_hiv" & "has_sud"
+  df_cause_flags <- df_cause_flags %>%
+    select(-c("has_hiv", "has__subs"))
+  
+  # Create row count (disease count #)
+  df_cause_flags <- df_cause_flags %>%
+    mutate(cause_count = rowSums(across(colnames(df_cause_flags)[-1])))
+  
+  # Join data back with main df
+  dt <- dt %>% left_join(df_cause_flags, by = "bene_id")
+
+  ##----------------------------------------------------------------
+  ## 5. Save as chunk
   ##----------------------------------------------------------------
   
   # Extract state abbreviation from directory path
