@@ -48,7 +48,10 @@
 ##----------------------------------------------------------------
 
 
-# Clear environment and set library paths
+##----------------------------------------------------------------
+# 0 Clear environment and set library paths
+##----------------------------------------------------------------
+
 rm(list = ls())
 pacman::p_load(arrow, dplyr, openxlsx, RMySQL, data.table, ini, DBI, tidyr, openxlsx,glmnet, broom)
 library(lbd.loader, lib.loc = sprintf("/share/geospatial/code/geospatial-libraries/lbd.loader-%s", R.version$major))
@@ -71,15 +74,11 @@ if (Sys.info()["sysname"] == 'Linux'){
   l <- 'L:/'
 }
 
-##----------------------------------------------------------------
-# 0. Read in data from SLURM job submission
-##----------------------------------------------------------------
-
 ##---------------------------
-## 0) Read args / data
+## 0.1 Read args / data
 ##---------------------------
 if (interactive()) {
-  path <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/bested/aggregated_by_year/compiled_F2T_data_2014_age70.parquet"
+  path <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/20250915/aggregated_by_year/compiled_F2T_data_2014_age70.parquet"
   df <- open_dataset(path) %>% collect() %>% as.data.table()
   year_id <- df$year_id[1]
   file_type <- "F2T"
@@ -109,7 +108,7 @@ if (interactive()) {
 }
 
 ##---------------------------
-## 1) Helpers
+## 1) Functions / Helpers
 ##---------------------------
 ensure_dir_exists <- function(d) if (!dir.exists(d)) dir.create(d, recursive = TRUE)
 generate_filename <- function(prefix, extension, cause = NULL) {
@@ -117,25 +116,6 @@ generate_filename <- function(prefix, extension, cause = NULL) {
   paste0(prefix, cpart, "_", file_type, "_year", year_id,
          "_age", age_group_years_start, extension)
 }
-
-# outputs
-base_output_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis"
-date_folder     <- format(Sys.time(), "%Y%m%d")
-output_folder   <- file.path(base_output_dir, "04.Two_Part_Estimates", date_folder)
-
-# parent branches under by_cause
-by_cause_root          <- file.path(output_folder, "by_cause")
-
-# boot_chunks is by cause, year, then age group (e.g. boot_chunks/_enteric_all/2015/65/chunk1.parquet)
-by_cause_boot_parent   <- file.path(by_cause_root, "boot_chunks")
-by_cause_results_parent<- file.path(by_cause_root, "results")
-by_cause_regression_coefficients <- file.path(by_cause_root, "regression_coefficients")
-
-ensure_dir_exists(output_folder)
-ensure_dir_exists(by_cause_root)
-ensure_dir_exists(by_cause_boot_parent)
-ensure_dir_exists(by_cause_results_parent)
-ensure_dir_exists(by_cause_regression_coefficients)
 
 slugify <- function(x) {
   x <- gsub("\\s+", "_", x, perl = TRUE)
@@ -170,18 +150,77 @@ extract_all_coefs <- function(model, suffix) {
     select(variable, starts_with("estimate_"), starts_with("p_"))
 }
 
+# Coerces "has_" columns to factor, with levels 0 and 1
+coerce_has_to_factor <- function(df) {
+  # identify columns starting with "has_"
+  has_vars <- grep("^has_", names(df), value = TRUE)
+  
+  for (v in has_vars) {
+    # coerce to factor with explicit levels 0 and 1
+    df[[v]] <- factor(df[[v]], levels = c(0, 1))
+  }
+  
+  return(df)
+}
+
+# Helper: predict on bootstrap sample holding everything (incl. cause_count) as observed,
+# but forcing (has_hiv, has_sud) to a given scenario. 
+predict_scenario <- function(dat, hiv_level, sud_level, model, nm) {
+  #' @dat Input datatable (df)
+  #' @hiv_level Either 0 or 1 (str)
+  #' @sud_level Either 0 or 1 (str)
+  #' @model Model object
+  #' @nm Name for prediction column (str)
+  tmp <- copy(dat)
+  tmp[, has_hiv := factor(hiv_level, levels = levels(dat$has_hiv))]
+  tmp[, has_sud := factor(sud_level, levels = levels(dat$has_sud))]
+  tmp[, pred_cost := predict(model, newdata = tmp, type = "response")]
+  out <- tmp[, .(val = mean(pred_cost, na.rm = TRUE)),
+             by = .(race_cd, sex_id, age_group_years_start)]
+  setnames(out, "val", nm)
+  out
+}
+
+##---------------------------
+## 1.1) Set Directories
+##---------------------------
+# outputs
+base_output_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis"
+date_folder     <- format(Sys.time(), "%Y%m%d")
+output_folder   <- file.path(base_output_dir, "04.Two_Part_Estimates", date_folder)
+
+# parent branches under by_cause
+by_cause_root          <- file.path(output_folder, "by_cause")
+
+# boot_chunks is by cause, year, then age group (e.g. boot_chunks/_enteric_all/2015/65/chunk1.parquet)
+by_cause_boot_parent   <- file.path(by_cause_root, "boot_chunks")
+by_cause_results_parent<- file.path(by_cause_root, "results")
+by_cause_regression_coefficients <- file.path(base_output_dir, "02.Regression_Estimates", date_folder)
+
+ensure_dir_exists(output_folder)
+ensure_dir_exists(by_cause_root)
+ensure_dir_exists(by_cause_boot_parent)
+ensure_dir_exists(by_cause_results_parent)
+ensure_dir_exists(by_cause_regression_coefficients)
+
 ##---------------------------
 ## 2) Coerce factors
 ##---------------------------
+
+# Coerce "has_" columns to factors w/ level 0 and 1
+df <- coerce_has_to_factor(df)
+
+# Coerce additional columns to factors
 df[, `:=`(
   acause_lvl2 = factor(acause_lvl2),
   race_cd     = factor(race_cd),
   sex_id      = factor(sex_id),
-  has_hiv     = factor(has_hiv, levels = c(0, 1)),
-  has_sud     = factor(has_sud, levels = c(0, 1)),
-  has_hepc    = factor(has_hepc, levels = c(0, 1)),
-  has_cost    = factor(has_cost, levels = c(0, 1))
+  toc         = factor(toc)
 )]
+
+##---------------------------
+## 3) Run Bootstrap
+##---------------------------
 
 # --- Setup for a single cause run (no function) -------------------------------
 cat("\n=== Running cause:", cause_name, "===\n")
@@ -196,23 +235,30 @@ if (length(old_files) > 0L) unlink(old_files, force = TRUE)
 
 # Cause subset
 df_cause <- as.data.table(df)[acause_lvl2 == cause_name]
+
+# Drop df to save memory
+rm(df)
+
+# Bootstrap
 if (nrow(df_cause) == 0L) {
   cat("[", cause_name, "] No rows for this cause. Nothing to do.\n", sep = "")
 } else {
-  # --- Build bins -------------------------------------------------------------
-  df_bins_master <- df_cause %>%
+  # --- Build weight bins -------------------------------------------------------------
+  sex_weights <- df_cause %>%
     group_by(race_cd, sex_id, age_group_years_start) %>%
     summarise(row_count = n(), .groups = "drop") %>%
     group_by(race_cd, age_group_years_start) %>%
     mutate(prop_bin = row_count / sum(row_count)) %>%
-    ungroup()
-  
+    ungroup() %>%
+    as.data.table()
+
   # Collapsed-over-sex total row count to merge into summary later
-  df_bins_summary <- df_bins_master %>%
+  df_row_count_metadata <- sex_weights %>%
     group_by(race_cd, age_group_years_start) %>%
     summarise(total_row_count = sum(row_count, na.rm = TRUE), .groups = "drop") %>%
     mutate(acause_lvl2 = as.character(cause_name)) %>%
     select(acause_lvl2, race_cd, age_group_years_start, total_row_count)
+  
   
   # --- Create DF to store regression outputs ----------------------------------
   list_regression <- list()
@@ -225,7 +271,8 @@ if (nrow(df_cause) == 0L) {
   for (b in seq_len(B)) {
     cat("[", cause_name, "] Bootstrap iteration:", b, "/", B, "\n", sep = "")
     
-    # Perform sampling
+    # Perform stratified sampling - this ensures that in the "by_keys" variable below, we are sampling within that
+    # particular strata, so we don't end up with samples that have none of the more rarer cases, causing bootstrapping to fail
     
     # Choose stratification keys (may need to change how we decide boot strapped stratification)
     by_keys <- c("sex_id", "has_hiv", "has_sud")
@@ -233,41 +280,21 @@ if (nrow(df_cause) == 0L) {
     # One stratified resample (size-preserving within each stratum)
     df_boot <- df_cause[, .SD[sample(.N, .N, replace = TRUE)], by = by_keys]
     
-    # Old method of sampling, testing new method above
-    #df_boot <- df_cause[sample(.N, replace = TRUE)]
-    
-    # Stable factor levels
-    df_boot[, `:=`(
-      race_cd = factor(race_cd, levels = levels(df$race_cd)),
-      sex_id  = factor(sex_id,  levels = levels(df$sex_id)),
-      has_hiv = factor(has_hiv, levels = levels(df$has_hiv)),
-      has_sud = factor(has_sud, levels = levels(df$has_sud))
-    )]
-    
-    # Diversity guard
+    # Factor Check - this checks the count of the number of levels (i.e. are 0 AND 1 present)
     if (nlevels(droplevels(df_boot$has_hiv)) < 2 ||
         nlevels(droplevels(df_boot$has_sud)) < 2) {
       cat("[", cause_name, "] Skip iter ", b, " - insufficient HIV/SUD variation\n", sep = "")
       next
     }
     
-    # Part 1: logit
-    mod_logit <- try(glm(
-      has_cost ~ has_hiv * has_sud + race_cd + sex_id,
-      data = df_boot, family = binomial(link = "logit")
-    ), silent = TRUE)
-    if (inherits(mod_logit, "try-error")) {
-      cat("[", cause_name, "] Skip iter ", b, " - logit failed\n", sep = ""); next
-    }
-    
-    # Part 2: gamma on positive costs (truncate 99.5%)
+    # Gamma Model - Gamma on positive costs (truncate 99.5%)
     df_gamma_input <- df_boot[tot_pay_amt > 0]
     if (nrow(df_gamma_input) < 10) {
       cat("[", cause_name, "] Skip iter ", b, " - too few positive costs\n", sep = ""); next
     }
     df_gamma_input[, tot_pay_amt := pmin(tot_pay_amt, quantile(tot_pay_amt, 0.995, na.rm = TRUE))]
     mod_gamma <- try(glm(
-      tot_pay_amt ~ has_hiv * has_sud + race_cd + sex_id,
+      tot_pay_amt ~ has_hiv * has_sud + race_cd + sex_id + cause_count,
       data = df_gamma_input, family = Gamma(link = "log"),
       control = glm.control(maxit = 100)
     ), silent = TRUE)
@@ -275,48 +302,50 @@ if (nrow(df_cause) == 0L) {
       cat("[", cause_name, "] Skip iter ", b, " - gamma failed\n", sep = ""); next
     }
     
-    # Prediction grid over bins × {HIV(0,1) × SUD(0,1)}
-    grid_input_master <- as.data.table(df_bins_master)[, .(race_cd, sex_id, age_group_years_start, prop_bin)]
-    combo_A <- CJ(has_hiv = levels(df_boot$has_hiv), has_sud = levels(df_boot$has_sud))
-    grid_input_master[, dummy := 1L]; combo_A[, dummy := 1L]
-    grid_input_master <- merge(grid_input_master, combo_A, by = "dummy", allow.cartesian = TRUE)[, dummy := NULL]
+    # Counterfactual testing - Create four scenarios on the bootstrap sample and make model predictions × {HIV(0,1) × SUD(0,1)}
+    sc00 <- predict_scenario(df_gamma_input, "0", "0", mod_gamma, "cost_neither")
+    sc10 <- predict_scenario(df_gamma_input, "1", "0", mod_gamma, "cost_hiv_only")
+    sc01 <- predict_scenario(df_gamma_input, "0", "1", mod_gamma, "cost_sud_only")
+    sc11 <- predict_scenario(df_gamma_input, "1", "1", mod_gamma, "cost_hiv_sud")
     
-    # Predict E[cost] = P(cost>0) × E[cost | cost>0]
-    grid_input_master[, prob_has_cost := predict(mod_logit, newdata = .SD, type = "response")]
-    grid_input_master[, cost_if_pos   := predict(mod_gamma, newdata = .SD, type = "response")]
-    grid_input_master[, exp_cost      := prob_has_cost * cost_if_pos]
+    # Merge sex_weights with our counterfactual scenario predictions
+    df_sc <- merge(sex_weights, sc00)
+    df_sc <- merge(df_sc, sc10)
+    df_sc <- merge(df_sc, sc01)
+    df_sc <- merge(df_sc, sc11)
     
-    # Standardize & collapse to (race, age, has_hiv, has_sud)
-    out_b <- copy(grid_input_master)
-    out_b[, exp_cost_bin := exp_cost * prop_bin]
-    out_b[, acause_lvl2 := cause_name]
+    # Add cause name
+    df_sc$acause_lvl2 <- cause_name
+    
+    # Multiply the prop_bin (sex weight) by each of the predicted values so we can group by summary to collapse
+    for (col in c("cost_neither", "cost_hiv_only", "cost_sud_only", "cost_hiv_sud")) {
+      df_sc[[col]] <- df_sc[[col]] * df_sc[["prop_bin"]]
+    }
+    
+    # Group by summary, collapse on sex_id to create final bootstrap predictions
+    out_b <- copy(df_sc)
     out_b <- out_b[
-      , .(exp_cost = sum(exp_cost_bin)),
-      by = .(acause_lvl2, race_cd, age_group_years_start, has_hiv, has_sud)
+      , .(
+        cost_neither    = sum(cost_neither,   na.rm = TRUE),
+        cost_hiv_only   = sum(cost_hiv_only,  na.rm = TRUE),
+        cost_sud_only   = sum(cost_sud_only,  na.rm = TRUE),
+        cost_hiv_sud    = sum(cost_hiv_sud,   na.rm = TRUE)
+      ),
+      by = .(acause_lvl2, race_cd, age_group_years_start)
+    ][
+      , `:=`(
+        delta_hiv_only = cost_hiv_only - cost_neither,
+        delta_sud_only = cost_sud_only - cost_neither,
+        delta_hiv_sud  = cost_hiv_sud  - cost_neither,
+        bootstrap_iter = b
+      )
     ]
-    
-    # Wide & deltas
-    out_b <- dcast(
-      out_b,
-      acause_lvl2 + race_cd + age_group_years_start ~ has_hiv + has_sud,
-      value.var = "exp_cost"
-    )
-    for (nm in c("0_0","1_0","0_1","1_1")) if (!nm %in% names(out_b)) out_b[[nm]] <- NA_real_
-    setnames(out_b, c("0_0","1_0","0_1","1_1"),
-             c("cost_neither","cost_hiv_only","cost_sud_only","cost_hiv_sud"))
-    
-    out_b[, `:=`(
-      delta_hiv_only = cost_hiv_only - cost_neither,
-      delta_sud_only = cost_sud_only - cost_neither,
-      delta_hiv_sud  = cost_hiv_sud  - cost_neither,
-      bootstrap_iter = b
-    )]
 
-    # Size checking
+    # Size checking (Skips bootstrap if detecting tiny or enormous values that don't seem realistic)
     cols_to_check <- c("cost_neither", "cost_sud_only", "cost_hiv_only", "cost_hiv_sud")
     skip_to_next <- FALSE
     
-    # Check when columns have enormous values
+    # Check when columns have tiny values
     for (col in cols_to_check) {
       if (any(out_b[[col]] < 1, na.rm = TRUE)) {
         message("Found values of ", col, " < 1.")
@@ -363,18 +392,17 @@ if (nrow(df_cause) == 0L) {
     ##----------------------------------------------------------------
     ## Save regression coefficients
     ##----------------------------------------------------------------
-    logit_df <- extract_all_coefs(mod_logit, "logit")
     gamma_df <- extract_all_coefs(mod_gamma, "gamma")
     
     # Merge and annotate regression coefficients
-    regression_results <- full_join(logit_df, gamma_df, by = "variable") %>%
+    regression_results <- gamma_df %>%
       mutate(
         interaction_dropped = if_else(is.na(estimate_gamma) & str_detect(variable, ":"), TRUE, FALSE),
         year_id = year_id,
         file_type = file_type,
         age_group_years_start = age_group_years_start
       ) %>%
-      select(variable, estimate_logit, p_logit, estimate_gamma, p_gamma,
+      select(variable, estimate_gamma, p_gamma,
              interaction_dropped, year_id, file_type, age_group_years_start)
     
     # label bootstrap value column
@@ -383,13 +411,6 @@ if (nrow(df_cause) == 0L) {
     
     # Add to regression list
     list_regression[[b]] <- regression_results 
-    
-    # # Save regression coefficients (should be safe to delete if the above list works)
-    # file_out_regression <- generate_filename("regression_results", ".csv")
-    # file_out_regression <- sub("\\.csv$", paste0("_bootstrap#", b, ".csv"), file_out_regression)
-    # out_path_regression <- file.path(regression_coefficients_output_folder, file_out_regression)
-    # write_csv(regression_results, out_path_regression)
-    # cat("✅ Regression coefficients saved to:", out_path_regression, "\n")
     
     # Add +1 to iterations count
     kept_iters <- kept_iters + 1L
@@ -435,7 +456,7 @@ if (nrow(df_cause) == 0L) {
           upper_ci_delta_hiv_sud  = quantile(delta_hiv_sud,  0.975, na.rm = TRUE),
           .groups = "drop"
         ) %>%
-        left_join(df_bins_summary, by = c("acause_lvl2","race_cd","age_group_years_start")) %>%
+        left_join(df_row_count_metadata, by = c("acause_lvl2","race_cd","age_group_years_start")) %>%
         mutate(year_id = year_id, file_type = file_type) %>%
         rename(
           mean_cost     = mean_cost_neither,

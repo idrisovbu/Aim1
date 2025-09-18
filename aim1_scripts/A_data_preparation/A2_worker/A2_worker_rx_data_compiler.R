@@ -169,13 +169,11 @@ for (i in 1:nrow(data_dirs)) {
   message("Mapping completed. Number of records: ", nrow(dt))
   print(table(is.na(dt$acause_lvl2)))
   
-  # Optional: preview a sample
-  #print(head(dt, 5))
-  
   # Convert back to data.table
   setDT(dt)
   
-  collapsed <- dt[, .(
+  # Collapse on encounter_id
+  dt <- dt[, .(
     has_hiv            = max(has_hiv, na.rm=TRUE),
     has_sud            = max(has_sud, na.rm=TRUE),
     has_hepc           = max(has_hepc, na.rm=TRUE),
@@ -189,7 +187,7 @@ for (i in 1:nrow(data_dirs)) {
   desired_order <- c("bene_id", "acause_lvl2", "acause_lvl1", "cause_name_lvl1", "cause_name_lvl2",
                      "year_id", "age_group_years_start", "race_cd", "sex_id", "toc",
                      "has_hiv", "has_sud", "has_hepc", "has_cost", "unique_encounters", "tot_pay_amt")
-  setcolorder(collapsed, intersect(desired_order, names(collapsed)))
+  setcolorder(dt, intersect(desired_order, names(dt)))
   
   ##----------------------------------------------------------------
   ## 4. Add binary disease flag columns and unique disease count column per grouped bene
@@ -239,11 +237,11 @@ for (i in 1:nrow(data_dirs)) {
   chunk_path <- file.path(rx_chunk_folder, chunk_filename)
   
   # Write output
-  write_parquet(collapsed, chunk_path, compression = "snappy", use_dictionary = TRUE)
+  write_parquet(dt, chunk_path, compression = "snappy", use_dictionary = TRUE)
   
   message(sprintf("Completed %d of %d folders", i, nrow(data_dirs)))
   message("Done in: ", Sys.time() - start)
-  rm(dt, collapsed); gc()
+  rm(dt); gc()
 }
 
   

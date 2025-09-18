@@ -972,3 +972,61 @@ p17_plotly <- ggplotly(p17, tooltip = c("Year", "cost_usd", "cost_type", "Level 
 
 saveWidget(p17_plotly, file.path(output_dir, "F17.SS_2016_per_encounter_drop.html"), selfcontained = TRUE)
 
+##########################################################################
+# Figure 18: Using SS plot spending by disease over years to investigate 2016 drop (per encounter)
+# Rows = years, columns = diseases (neither, hiv, sud, hiv+sud, so four lines total), all age groups, all races, all sexes combined
+##########################################################################
+
+# Load SS data
+df_f18 <- read.csv(file = file.path(input_dir, "01.Summary_Statistics_inflation_adjusted_aggregated.csv"))
+
+# Group by summary to get mean_cost for all races all years all age groups
+df_f18 <- df_f18 %>%
+  group_by(acause_lvl2, year_id, toc, has_hiv, has_sud) %>%
+  summarise(
+    mean_cost = weighted.mean(avg_cost_per_encounter, w = total_unique_bene, na.rm = TRUE)
+  )
+
+# Merge with mapping table for cause names
+df_f18 <- left_join(x = df_f18, y = df_map, by = "acause_lvl2") %>%
+  ungroup() %>%
+  select(-c("acause_lvl2", "acause_lvl1", "cause_name_lvl1"))
+
+df_f18 <- df_f18 %>%
+  mutate(
+    combo = paste0(has_hiv, has_sud),
+    cost_type = case_when(
+      combo == "00" ~ "Mean",
+      combo == "01" ~ "SUD",
+      combo == "10" ~ "HIV",
+      combo == "11" ~ "HIV + SUD"
+    )
+  ) %>%
+  select(-c(combo, has_hiv, has_sud))
+
+# # Convert to dollars
+# for (col in colnames(df_f18)) {
+#   if (col == "year_id" | col == "toc" | col == "cost_type" | col == "cause_name_lvl2") {
+#     next
+#   } else {
+#     df_f18[[col]] <- dollar(df_f18[[col]])
+#   }
+# }
+
+# Make a ggplot and convert to plotly
+toc_filter <- "AM"
+
+p18 <- ggplot(df_f18 %>% filter(cost_type == "HIV") %>% filter(toc != "IP"), aes(x = year_id, y = mean_cost, color = toc, group = toc)) +
+  geom_line() +
+  geom_point(size = 1) +
+  facet_wrap(vars(`cause_name_lvl2`), scales = "free_y") +
+  scale_y_continuous(labels = scales::dollar) +
+  labs(x = "Year", y = "Cost (USD)", color = "Cost Type", title = paste0("Type of care: All")) +
+  theme_minimal(base_size = 12)
+
+p18_plotly <- ggplotly(p18, tooltip = c("year_id", "mean_cost", "toc", "Level 2 Cause"))
+
+p18_plotly
+
+saveWidget(p18_plotly, file.path(output_dir, "F18.SS.html"), selfcontained = TRUE)
+

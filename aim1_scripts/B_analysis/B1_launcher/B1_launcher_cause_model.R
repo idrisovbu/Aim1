@@ -70,8 +70,8 @@ log_dir  <- file.path(l, "LU_CMS/DEX/hivsud/aim1/B_analysis/logs", log_date)
 dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
 
 
-bootstrap_iterations_F2T <- 8
-bootstrap_iterations_RX  <- 8
+bootstrap_iterations_F2T <- 15
+bootstrap_iterations_RX  <- 15
 
 #### was running 1 hour with these specs. 
 

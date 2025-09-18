@@ -39,7 +39,7 @@ if (Sys.info()["sysname"] == 'Linux'){
 ## 1. Create parameters CSV file
 ##----------------------------------------------------------------
 # Input location (adjust date as needed based on the run date)
-run_date <- "20250914" # bested was 20250620 (update as needed) # last run on  20250914
+run_date <- "bested" # bested was 20250620 (update as needed) # last run on  20250914
 
 fp_input_data <- file.path(l, "LU_CMS/DEX/hivsud/aim1/A_data_preparation", run_date, "aggregated_by_year")
 

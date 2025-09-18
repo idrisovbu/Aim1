@@ -34,15 +34,12 @@ if (Sys.info()["sysname"] == 'Linux'){
 
 if (interactive()) {
   base_output_dir <- file.path(l, "LU_CMS/DEX/hivsud/aim1/A_data_preparation")
-  date_folder <- "20250627"
-  # Manual testing (set year of interest)
+  date_folder <- "20250917"
   data_year <- 2010
-  rx_folder <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/20250627/rx_chunks"
-  #rx_files <- list.files(rx_folder, pattern = "\\.parquet$", full.names = TRUE)
-  rx_files <- list.files(rx_folder, pattern = paste0("rx_", data_year, "_age.*\\.parquet$"), recursive = TRUE, full.names = TRUE)
-  #rx_files <- rx_files[grepl(paste0("rx_", data_year), rx_files)]
-  data_age  <- 65
-  
+  data_age  <- 60
+  rx_folder <- paste0("/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/", date_folder, "/rx_chunks")
+  rx_files <- list.files(rx_folder, pattern = paste0("rx_", data_year, "_age", data_age, ".*\\.parquet$"), recursive = TRUE, full.names = TRUE)
+
 } else {
   # From SUBMIT_ARRAY_JOB: args[1] = full CSV, args[2] = unique year CSV
   args <- commandArgs(trailingOnly = TRUE)
@@ -56,7 +53,6 @@ if (interactive()) {
   df_unique <- fread(fp_parameters_unique)
   data_year <- df_unique[task_id, year_id]
   data_age  <- df_unique[task_id, age_group_years_start]
-  
   
   # Load the full list of chunk paths
   df_all <- fread(fp_parameters_full)
@@ -119,45 +115,11 @@ for (i in seq_along(year_files)) {
 
 # Combine all files for the year
 rx_year_df <- rbindlist(year_list, use.names = TRUE, fill = TRUE)
-# Combine all files for the year
-rx_year_df <- rbindlist(year_list, use.names = TRUE, fill = TRUE)
-
-# Collapse to unique beneficiary × disease × other dimensions
-collapsed <- rx_year_df[, .(
-  has_hiv            = max(has_hiv, na.rm=TRUE),
-  has_sud            = max(has_sud, na.rm=TRUE),
-  has_hepc           = max(has_hepc, na.rm=TRUE),
-  unique_encounters  = sum(unique_encounters, na.rm=TRUE), # sum across chunks
-  tot_pay_amt        = sum(tot_pay_amt, na.rm=TRUE),
-  has_cost           = as.integer(sum(tot_pay_amt, na.rm=TRUE) > 0)
-), by = .(bene_id, acause_lvl1, acause_lvl2, cause_name_lvl1, cause_name_lvl2,
-          year_id, age_group_years_start, toc, race_cd, sex_id)]
-
-# Consistent column order
-desired_order <- c("bene_id", "acause_lvl2", "acause_lvl1", "cause_name_lvl1", "cause_name_lvl2",
-                   "year_id", "age_group_years_start", "race_cd", "sex_id", "toc",
-                   "has_hiv", "has_sud", "has_hepc", "has_cost", "unique_encounters", "tot_pay_amt")
-
-setcolorder(collapsed, intersect(desired_order, names(collapsed)))
 
 # Define output path and save
-# out_path <- file.path(compiled_dir, sprintf("compiled_RX_data_%s.parquet", yr))
-# write_parquet(collapsed, out_path, compression = "snappy")
-# message("Final compiled file saved: ", out_path)
-
-# Save one file per age group
-# unique_ages <- sort(unique(collapsed$age_group_years_start))
-# for (ag in unique_ages) {
-#   df_age <- collapsed[age_group_years_start == ag]
-#   out_path <- file.path(compiled_dir, sprintf("compiled_RX_data_%s_age%s.parquet", yr, ag))
-#   write_parquet(df_age, out_path, compression = "snappy")
-#   message("Saved: ", out_path)
-# }
-
 out_path <- file.path(compiled_dir, sprintf("compiled_RX_data_%s_age%s.parquet", data_year, data_age))
-write_parquet(collapsed, out_path, compression = "snappy")
+write_parquet(rx_year_df, out_path, compression = "snappy")
 message("Saved: ", out_path)
-
 
 # Cleanup
 rm(rx_year_df, year_list); gc()
