@@ -18,7 +18,7 @@ date_today <- format(Sys.time(), "%Y%m%d")
 # Detect IHME cluster by checking for /mnt/share/limited_use
 if (dir.exists("/mnt/share/limited_use")) {
   # IHME/cluster environment
-  date_of_input <- "20250914" # last run on 20250914
+  date_of_input <- "bested" # last run on 20250914
   base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/"
   input_dir <- file.path(base_dir, "05.Aggregation_Summary", date_of_input)
   figures_dir <- file.path(base_dir, "06.Figures")
@@ -139,7 +139,7 @@ F1 <- df_master %>%
   scale_fill_viridis_d(option = "plasma") +
   coord_flip() +
   labs(
-    title = "Average Cost per Beneficiary by Disease Category",
+    title = "Average Cost per Beneficiary by Disease Category - No HIV / SUD",
     x = "Disease Category", y = "Average Cost (2019 USD)"
   ) +
   theme_minimal(base_size = 13) +
@@ -807,12 +807,12 @@ p15 <- ggplot(df_f15_long, aes(x = Year, y = cost_usd, color = cost_type, group 
   geom_point(size = 1) +
   facet_wrap(vars(`Level 2 Cause`), scales = "free_y") +
   scale_y_continuous(labels = scales::dollar) +
-  labs(x = "Year", y = "Cost (USD)", color = "Cost Type") +
+  labs(x = "Year", y = "Cost (USD)", color = "Cost Type", title = "Summary Statistics - Average Spending per beneficiary per disease category, stratified by Cost Type") +
   theme_minimal(base_size = 12)
 
 p15_plotly <- ggplotly(p15, tooltip = c("Year", "cost_usd", "cost_type", "Level 2 Cause"))
 
-saveWidget(p15_plotly, file.path(output_dir, "F15.SS_2016_per_bene_drop.html"), selfcontained = TRUE)
+saveWidget(p15_plotly, file.path(output_dir, "F15.SS_per_ben.html"), selfcontained = TRUE)
 
 
 
@@ -821,7 +821,6 @@ saveWidget(p15_plotly, file.path(output_dir, "F15.SS_2016_per_bene_drop.html"), 
 # Rows = years, columns = diseases (Mean, HIV, SUD, HIV + SUD lines), 
 # all age groups, all races, all sexes combined
 ##########################################################################
-
 
 # 1) Group to get weighted means across strata (age/race/sex), by cause & year
 df_f16 <- df_master %>%
@@ -890,12 +889,12 @@ p16 <- ggplot(df_f16_long, aes(x = Year, y = cost_usd, color = cost_type, group 
   geom_point(size = 1) +
   facet_wrap(vars(`Level 2 Cause`), scales = "free_y") +
   scale_y_continuous(labels = scales::dollar) +
-  labs(x = "Year", y = "Cost (USD)", color = "Cost Type") +
+  labs(x = "Year", y = "Cost (USD)", color = "Cost Type", title = "Model Results - Average Spending per beneficiary per disease category, stratified by Cost Type") +
   theme_minimal(base_size = 12)
 
 p16_plotly <- ggplotly(p16, tooltip = c("Year", "cost_usd", "cost_type", "Level 2 Cause"))
 
-saveWidget(p16_plotly, file.path(output_dir, "F16.MODELED_2016_drop.html"), selfcontained = TRUE)
+saveWidget(p16_plotly, file.path(output_dir, "F16.model_per_ben.html"), selfcontained = TRUE)
 
 ##########################################################################
 # Figure 17: Using SS plot spending by disease over years to investigate 2016 drop (per encounter)
@@ -965,16 +964,20 @@ p17 <- ggplot(df_f17_long, aes(x = Year, y = cost_usd, color = cost_type, group 
   geom_point(size = 1) +
   facet_wrap(vars(`Level 2 Cause`), scales = "free_y") +
   scale_y_continuous(labels = scales::dollar) +
-  labs(x = "Year", y = "Cost (USD)", color = "Cost Type") +
+  labs(x = "Year", y = "Cost (USD)", color = "Cost Type", title = "Summary Statistics - Average Spending per encounter per disease category, stratified by Cost Type") +
   theme_minimal(base_size = 12)
 
 p17_plotly <- ggplotly(p17, tooltip = c("Year", "cost_usd", "cost_type", "Level 2 Cause"))
 
-saveWidget(p17_plotly, file.path(output_dir, "F17.SS_2016_per_encounter_drop.html"), selfcontained = TRUE)
+saveWidget(p17_plotly, file.path(output_dir, "F17.SS_per_encounter.html"), selfcontained = TRUE)
 
 ##########################################################################
-# Figure 18: Using SS plot spending by disease over years to investigate 2016 drop (per encounter)
-# Rows = years, columns = diseases (neither, hiv, sud, hiv+sud, so four lines total), all age groups, all races, all sexes combined
+# Figure 18, 19, 20, 21: Using SS plot spending by disease over years to investigate 2016 drop (per encounter)
+# 4 plots:
+# 18 - HIV, all toc except IP
+# 19 - HIV, IP
+# 20 - SUD, all toc except IP
+# 21 - SUD, IP
 ##########################################################################
 
 # Load SS data
@@ -984,7 +987,8 @@ df_f18 <- read.csv(file = file.path(input_dir, "01.Summary_Statistics_inflation_
 df_f18 <- df_f18 %>%
   group_by(acause_lvl2, year_id, toc, has_hiv, has_sud) %>%
   summarise(
-    mean_cost = weighted.mean(avg_cost_per_encounter, w = total_unique_bene, na.rm = TRUE)
+    mean_cost = weighted.mean(avg_cost_per_encounter, w = total_unique_bene, na.rm = TRUE),
+    total_unique_bene = sum(total_unique_bene)
   )
 
 # Merge with mapping table for cause names
@@ -1004,29 +1008,181 @@ df_f18 <- df_f18 %>%
   ) %>%
   select(-c(combo, has_hiv, has_sud))
 
-# # Convert to dollars
-# for (col in colnames(df_f18)) {
-#   if (col == "year_id" | col == "toc" | col == "cost_type" | col == "cause_name_lvl2") {
-#     next
-#   } else {
-#     df_f18[[col]] <- dollar(df_f18[[col]])
-#   }
-# }
-
 # Make a ggplot and convert to plotly
-toc_filter <- "AM"
 
-p18 <- ggplot(df_f18 %>% filter(cost_type == "HIV") %>% filter(toc != "IP"), aes(x = year_id, y = mean_cost, color = toc, group = toc)) +
+# 18 - HIV, all toc except IP
+p18 <- ggplot(df_f18 %>% filter(cost_type == "HIV") %>% filter(toc != "IP"), aes(x = year_id, y = mean_cost, color = toc)) +
   geom_line() +
   geom_point(size = 1) +
   facet_wrap(vars(`cause_name_lvl2`), scales = "free_y") +
+  scale_x_continuous(breaks = unique(df_f18$year_id)) +
   scale_y_continuous(labels = scales::dollar) +
-  labs(x = "Year", y = "Cost (USD)", color = "Cost Type", title = paste0("Type of care: All")) +
-  theme_minimal(base_size = 12)
+  labs(x = "Year", y = "Cost (USD)", color = "Cost Type", title = paste0("Summary Statistics - Spending per encounter, Type of care: All except IP, Cost Type: HIV")) +
+  theme_minimal(base_size = 12) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 p18_plotly <- ggplotly(p18, tooltip = c("year_id", "mean_cost", "toc", "Level 2 Cause"))
 
 p18_plotly
 
-saveWidget(p18_plotly, file.path(output_dir, "F18.SS.html"), selfcontained = TRUE)
+# 19 - HIV, IP
+p19 <- ggplot(df_f18 %>% filter(cost_type == "HIV") %>% filter(toc == "IP"), aes(x = year_id, y = mean_cost, color = toc, group = toc)) +
+  geom_line() +
+  geom_point(size = 1) +
+  facet_wrap(vars(`cause_name_lvl2`), scales = "free_y") +
+  scale_x_continuous(breaks = unique(df_f18$year_id)) +
+  scale_y_continuous(labels = scales::dollar) +
+  labs(x = "Year", y = "Cost (USD)", color = "Cost Type", title = paste0("Summary Statistics - Spending per encounter, Type of care: IP, Cost Type: HIV")) +
+  theme_minimal(base_size = 12) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p19_plotly <- ggplotly(p19, tooltip = c("year_id", "mean_cost", "toc", "Level 2 Cause"))
+
+p19_plotly
+
+# 20 - SUD, all toc except IP
+p20 <- ggplot(df_f18 %>% filter(cost_type == "SUD") %>% filter(toc != "IP"), aes(x = year_id, y = mean_cost, color = toc, group = toc)) +
+  geom_line() +
+  geom_point(size = 1) +
+  facet_wrap(vars(`cause_name_lvl2`), scales = "free_y") +
+  scale_x_continuous(breaks = unique(df_f18$year_id)) +
+  scale_y_continuous(labels = scales::dollar) +
+  labs(x = "Year", y = "Cost (USD)", color = "Cost Type", title = paste0("Summary Statistics - Spending per encounter, Type of care: All Except IP, Cost Type: SUD")) +
+  theme_minimal(base_size = 12) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p20_plotly <- ggplotly(p20, tooltip = c("year_id", "mean_cost", "toc", "Level 2 Cause"))
+
+p20_plotly
+
+# 21 - SUD, IP
+p21 <- ggplot(df_f18 %>% filter(cost_type == "SUD") %>% filter(toc == "IP"), aes(x = year_id, y = mean_cost, color = toc, group = toc)) +
+  geom_line() +
+  geom_point(size = 1) +
+  facet_wrap(vars(`cause_name_lvl2`), scales = "free_y") +
+  scale_x_continuous(breaks = unique(df_f18$year_id)) +
+  scale_y_continuous(labels = scales::dollar) +
+  labs(x = "Year", y = "Cost (USD)", color = "Cost Type", title = paste0("Summary Statistics - Spending per encounter, Type of care: IP, Cost Type: SUD")) +
+  theme_minimal(base_size = 12) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p21_plotly <- ggplotly(p21, tooltip = c("year_id", "mean_cost", "toc", "Level 2 Cause"))
+
+p21_plotly
+
+# Save Plots
+saveWidget(p18_plotly, file.path(output_dir, "F18.SS_per_enc_hiv_all_no_ip.html"), selfcontained = TRUE)
+saveWidget(p19_plotly, file.path(output_dir, "F19.SS_per_enc_hiv_ip.html"), selfcontained = TRUE)
+saveWidget(p20_plotly, file.path(output_dir, "F20.SS_per_enc_sud_all_no_ip.html"), selfcontained = TRUE)
+saveWidget(p21_plotly, file.path(output_dir, "F21.SS_per_enc_sud_ip.html"), selfcontained = TRUE)
+
+
+# # Testing (safe to delete)
+# 
+# # HIV, no IP
+# p_test <- ggplot(df_f18 %>% filter(cost_type == "HIV") %>% filter(toc != "IP") %>% filter(cause_name_lvl2 == "HIV/AIDS"),
+#                  aes(x = year_id, y = mean_cost, color = toc)) +
+#   geom_line() +
+#   geom_point(aes(size = total_unique_bene), alpha = 0.7) +
+#   scale_x_continuous(breaks = unique(df_f18$year_id)) +
+#   scale_y_continuous(labels = scales::dollar) +
+#   labs(x = "Year", y = "Cost (USD)", color = "Cost Type", title = paste0("Summary Statistics - Spending per encounter, Type of care: All except IP, Cost Type: HIV")) +
+#   theme_minimal(base_size = 12) +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+# 
+# p_test_plotly <- ggplotly(p_test, tooltip = c("year_id", "mean_cost", "toc", "total_unique_bene"))
+# 
+# p_test_plotly
+# 
+# # HIV, only IP
+# View(df_f18 %>% filter(cost_type == "HIV") %>% filter(toc == "IP") %>% filter(cause_name_lvl2 == "HIV/AIDS"))
+# 
+# p_test <- ggplot(df_f18 %>% filter(cost_type == "HIV") %>% filter(toc == "IP") %>% filter(cause_name_lvl2 == "HIV/AIDS"),
+#                  aes(x = year_id, y = mean_cost, color = toc)) +
+#   geom_line() +
+#   geom_point(aes(size = total_unique_bene), alpha = 0.7) +
+#   scale_x_continuous(breaks = unique(df_f18$year_id)) +
+#   scale_y_continuous(labels = scales::dollar) +
+#   scale_size_continuous(
+#     name = "Beneficiaries",
+#     range = c(2, 12)   # min and max dot size in mm
+#   ) +
+#   labs(x = "Year", y = "Cost (USD)", color = "Cost Type", title = paste0("Summary Statistics - Spending per encounter, Type of care: IP, Cost Type: HIV")) +
+#   theme_minimal(base_size = 12) +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+# 
+# p_test_plotly <- ggplotly(p_test, tooltip = c("year_id", "mean_cost", "toc", "total_unique_bene"))
+# 
+# p_test_plotly
+# 
+# # Load SS data
+# df_ss <- read.csv(file = file.path(input_dir, "01.Summary_Statistics_inflation_adjusted_aggregated.csv"))
+# 
+# df_ss <- df_ss %>% filter(acause_lvl2 == "hiv")
+# 
+# 
+# # Unique beneficiaries per year by type of care
+# df_test <- df_f18 %>%
+#   group_by(year_id, toc, cause_name_lvl2) %>%
+#   summarize(total_unique_bene = sum(total_unique_bene))
+# 
+# cause_filter <- "HIV/AIDS"
+# 
+# p_test <- ggplot(df_test %>% filter(cause_name_lvl2 == cause_filter), aes(x = year_id, y = total_unique_bene, color = toc)) +
+#   geom_line() +
+#   geom_point(aes(size = total_unique_bene), alpha = 0.7) +
+#   labs(title = paste0("Total Unique Beneficiares - ", cause_filter)) 
+# 
+# p_test_plotly <- ggplotly(p_test, tooltip = c("year_id", "toc", "total_unique_bene"))
+# p_test_plotly
+# saveWidget(p_test_plotly, file.path(output_dir, "unique_bene_hiv.html"), selfcontained = TRUE)
+# 
+# # Avg cost per encounter per year by type of care ########## Interesting plot!
+# df_test <- df_ss %>%
+#   group_by(year_id, toc, acause_lvl2) %>%
+#   summarize(avg_encounters_per_bene = weighted.mean(avg_encounters_per_bene, sum_encounters_per_group),
+#             total_unique_bene = sum(total_unique_bene),
+#             avg_cost_per_encounter = weighted.mean(avg_cost_per_encounter, sum_encounters_per_group))
+# 
+# p_test <- ggplot(df_test %>% filter(toc != "IP"), aes(x = year_id, y = avg_encounters_per_bene, color = toc)) +
+#   geom_line() +
+#   geom_point(aes(size = avg_cost_per_encounter), alpha = 0.7) +
+#   scale_size_continuous(
+#     name = "Beneficiaries",
+#     range = c(2, 12)   # min and max dot size in mm
+#   ) +
+#   labs(title = paste0("Avg Encounters per Bene - HIV, size represents avg cost per encounter")) 
+#  #+facet_wrap(~toc)
+# 
+# p_test_plotly <- ggplotly(p_test, tooltip = c("year_id", "toc", "avg_encounters_per_bene", "avg_cost_per_encounter"))
+# p_test_plotly
+# saveWidget(p_test_plotly, file.path(output_dir, "anna_beads.html"), selfcontained = TRUE)
+# 
+# 
+# 
+# 
+# # Testing
+# p_test <- ggplot(df_f18 %>% filter(cost_type == "HIV") %>% filter(toc == "IP") %>% filter(cause_name_lvl2 == "HIV/AIDS"),
+#                  aes(x = year_id, y = mean_cost, color = toc)) +
+#   geom_line() +
+#   geom_point(aes(size = total_unique_bene), alpha = 0.7) +
+#   scale_x_continuous(breaks = unique(df_f18$year_id)) +
+#   scale_y_continuous(labels = scales::dollar) +
+#   scale_size_continuous(
+#     name = "Beneficiaries",
+#     range = c(2, 12)   # min and max dot size in mm
+#   ) +
+#   labs(x = "Year", y = "Cost (USD)", color = "Cost Type", title = paste0("Summary Statistics - Spending per encounter, Type of care: IP, Cost Type: HIV")) +
+#   theme_minimal(base_size = 12) +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+# 
+# p_test_plotly <- ggplotly(p_test, tooltip = c("year_id", "mean_cost", "toc", "total_unique_bene"))
+# p_test_plotly
+# saveWidget(p_test_plotly, file.path(output_dir, "HIV IP over time.html"), selfcontained = TRUE)
+# 
+# View(df_f18 %>% filter(cost_type == "HIV") %>% filter(toc == "IP") %>% filter(cause_name_lvl2 == "HIV/AIDS"))
+# View(df_f18 %>% filter(toc == "IP") %>% filter(cause_name_lvl2 == "HIV/AIDS"))
+
+
+
 

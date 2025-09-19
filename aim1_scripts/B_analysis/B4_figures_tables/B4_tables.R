@@ -1281,6 +1281,41 @@ fwrite(df_tpe9_final, file.path(output_tables_dir, "TPE_T9.csv"))
 
 
 
+##----------------------------------------------------------------
+## Exploring Data (safe to delete)
+##----------------------------------------------------------------
+
+# df_ss <- data_list$`01.Summary_Statistics_inflation_adjusted_aggregated`
+# 
+# df_ss_grouped <- df_ss %>%
+#   group_by(acause_lvl2) %>%
+#   summarise(
+#     avg_cost_per_bene = weighted.mean(avg_cost_per_bene, total_unique_bene, na.rm = TRUE),
+#     .groups = "drop"
+#   )
+# 
+# 
+# df_master <- read.csv(file = file.path(input_dir, "04.By_cause_inflation_adjusted_aggregated_unfiltered.csv"))
+# ### change colors, and add CI
+# F1 <- df_master %>%
+#   group_by(acause_lvl2, cause_name_lvl2) %>%
+#   summarise(
+#     avg_cost_per_bene = weighted.mean(mean_cost, total_row_count, na.rm = TRUE),
+#     .groups = "drop"
+#   ) %>%
+#   ggplot(aes(x = reorder(cause_name_lvl2, avg_cost_per_bene), y = avg_cost_per_bene, fill = cause_name_lvl2)) +
+#   geom_bar(stat = "identity") +
+#   geom_text(aes(label = scales::dollar(avg_cost_per_bene)), hjust = 1.1, color = "white", size = 4) +
+#   scale_fill_viridis_d(option = "plasma") +
+#   coord_flip() +
+#   labs(
+#     title = "Average Cost per Beneficiary by Disease Category",
+#     x = "Disease Category", y = "Average Cost (2019 USD)"
+#   ) +
+#   theme_minimal(base_size = 13) +
+#   theme(legend.position = "none")
+
+
 
 
 
