@@ -287,6 +287,17 @@ if (nrow(df_cause) == 0L) {
       next
     }
     
+    # # Create model that has all "has_" variables (EXPERIMENTAL - NOT IMPLEMENTED)
+    # has_vars <- grep("^has_", names(df_boot), value = TRUE)
+    # has_vars <- has_vars[5:length(has_vars)]
+    # 
+    # rhs_gamma_formula <- paste(
+    #   c("has_hiv * has_sud", "race_cd", "sex_id", "cause_count", has_vars),
+    #   collapse = " + "
+    # )
+    # 
+    # gamma_formula <- as.formula(paste("tot_pay_amt ~", rhs_gamma_formula))
+    
     # Gamma Model - Gamma on positive costs (truncate 99.5%)
     df_gamma_input <- df_boot[tot_pay_amt > 0]
     if (nrow(df_gamma_input) < 10) {
@@ -294,7 +305,7 @@ if (nrow(df_cause) == 0L) {
     }
     df_gamma_input[, tot_pay_amt := pmin(tot_pay_amt, quantile(tot_pay_amt, 0.995, na.rm = TRUE))]
     mod_gamma <- try(glm(
-      tot_pay_amt ~ has_hiv * has_sud + race_cd + sex_id + cause_count,
+      tot_pay_amt ~ has_sud + race_cd + sex_id + cause_count,
       data = df_gamma_input, family = Gamma(link = "log"),
       control = glm.control(maxit = 100)
     ), silent = TRUE)

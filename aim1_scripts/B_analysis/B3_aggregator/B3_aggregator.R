@@ -147,6 +147,7 @@ summary_table <- df_adj_ss %>%
     avg_encounters_per_bene = weighted.mean(avg_encounters_per_bene, n_benes_per_group, na.rm = TRUE),
     sum_encounters_per_group = sum(sum_encounters_per_group, na.rm = TRUE),
     total_unique_bene = sum(n_benes_per_group, na.rm = TRUE),
+    avg_cause_count_per_bene = weighted.mean(avg_cause_count_per_bene, n_benes_per_group, na.rm = TRUE),
     .groups = "drop"
   )
 

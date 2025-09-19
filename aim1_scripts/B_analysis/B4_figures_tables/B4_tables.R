@@ -1279,7 +1279,32 @@ df_tpe9_final$`HIV Cost Modeled (CI)`[df_tpe9_final$`Level 2 Cause` == "Substanc
 # Save and output able as .csv
 fwrite(df_tpe9_final, file.path(output_tables_dir, "TPE_T9.csv"))
 
+##----------------------------------------------------------------
+## 2.14 SS_T4
+#   All years, all toc, all races, all age groups
+# Rows: 25 diseases (including HIV and SUD)
+# Columns:
+# [1] "acause_lvl2"          
+# [2] "cause_name_lvl2"      
+# [3] "avg_cost_per_bene"    
+# [4] "avg_cost_hiv_per_bene"
+# [5] "total_row_count"   
+##----------------------------------------------------------------
 
+df_ss_t4 <- data_list$`04.By_cause_inflation_adjusted_aggregated_unfiltered` 
+
+df_ss_t4 <- df_test %>%
+  group_by(acause_lvl2, cause_name_lvl2) %>%
+  summarize(
+    avg_cost_per_bene = weighted.mean(mean_cost, total_row_count, na.rm = TRUE),
+    avg_cost_hiv_per_bene = weighted.mean(mean_cost_hiv, total_row_count, na.rm = TRUE),
+    avg_cost_sud_per_bene = weighted.mean(mean_cost_sud, total_row_count, na.rm = TRUE),
+    avg_cost_hiv_sud_per_bene = weighted.mean(mean_cost_hiv_sud, total_row_count, na.rm = TRUE),
+    total_row_count = sum(total_row_count)
+  )
+
+# Save and output able as .csv
+fwrite(df_ss_t4, file.path(output_tables_dir, "SS_T4.csv"))
 
 ##----------------------------------------------------------------
 ## Exploring Data (safe to delete)
@@ -1291,6 +1316,11 @@ fwrite(df_tpe9_final, file.path(output_tables_dir, "TPE_T9.csv"))
 #   group_by(acause_lvl2) %>%
 #   summarise(
 #     avg_cost_per_bene = weighted.mean(avg_cost_per_bene, total_unique_bene, na.rm = TRUE),
+#     avg_cost_per_encounter = weighted.mean(avg_cost_per_encounter, total_unique_bene, na.rm = TRUE),
+#     avg_cause_count_per_bene = weighted.mean(avg_cause_count_per_bene, total_unique_bene, na.rm = TRUE),
+#     avg_max_cost_per_bene = weighted.mean(max_cost_per_bene, total_unique_bene, na.rm = TRUE),
+#     sum_encounters_per_group = sum(sum_encounters_per_group),
+#     total_unique_bene = sum(total_unique_bene),
 #     .groups = "drop"
 #   )
 # 
@@ -1316,7 +1346,8 @@ fwrite(df_tpe9_final, file.path(output_tables_dir, "TPE_T9.csv"))
 #   theme(legend.position = "none")
 
 
-
+# Save and output able as .csv
+# fwrite(df_ss_t2, file.path(output_tables_dir, "SS_T2.csv"))
 
 
 

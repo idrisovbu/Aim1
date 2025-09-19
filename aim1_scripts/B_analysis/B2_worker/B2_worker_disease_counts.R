@@ -150,7 +150,8 @@ cross_tab_dt <- df_input[, .(n_benes_per_group = .N),
 # Utilization summary
 acause_utilization_dt <- df_input[, .(
   avg_encounters_per_bene = mean(unique_encounters),
-  sum_encounters_per_group = sum(unique_encounters)
+  sum_encounters_per_group = sum(unique_encounters),
+  avg_cause_count_per_bene = mean(cause_count)
 ), by = .(acause_lvl2, has_hiv, has_sud, has_hepc, race_cd, toc, age_group_years_start)]
 
 # Cost summary
@@ -183,7 +184,7 @@ summary_dt[, `:=`(year_id = year_id, file_type = file_type)]
 setcolorder(summary_dt, c(
   "acause_lvl2", "has_hiv", "has_sud", "has_hepc", "race_cd", "toc", "age_group_years_start",
   "avg_cost_per_bene", "avg_cost_per_encounter","avg_cost_per_bene_winsorized","max_cost_per_bene", "quantile_99_cost_per_bene", "sum_cost_per_group",
-  "n_benes_per_group", "avg_encounters_per_bene", "sum_encounters_per_group",
+  "n_benes_per_group", "avg_encounters_per_bene", "sum_encounters_per_group", "avg_cause_count_per_bene",
   "year_id", "file_type"
 ))
 
