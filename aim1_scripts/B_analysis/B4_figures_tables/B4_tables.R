@@ -1293,7 +1293,7 @@ fwrite(df_tpe9_final, file.path(output_tables_dir, "TPE_T9.csv"))
 
 df_ss_t4 <- data_list$`04.By_cause_inflation_adjusted_aggregated_unfiltered` 
 
-df_ss_t4 <- df_test %>%
+df_ss_t4 <- df_ss_t4%>%
   group_by(acause_lvl2, cause_name_lvl2) %>%
   summarize(
     avg_cost_per_bene = weighted.mean(mean_cost, total_row_count, na.rm = TRUE),
