@@ -52,13 +52,13 @@ base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis"
 date_summary_stats <- "bested"
 input_summary_stats <- file.path(base_dir, "01.Summary_Statistics", date_summary_stats)
 
-date_regression <- "20250921"
+date_regression <- "20250922" #9/22 was experimental run with the "has_" variables included in the model
 input_regression_estimates <- file.path(base_dir, "02.Regression_Estimates", date_regression)
 
 date_meta_stats <- "bested"
 input_meta_stats <- file.path(base_dir, "03.Meta_Statistics", date_meta_stats) 
 
-date_tpe <- "20250921"
+date_tpe <- "20250922"
 input_by_cause <- file.path(base_dir, "04.Two_Part_Estimates", date_tpe, "by_cause/results")
 
 # Define output directory

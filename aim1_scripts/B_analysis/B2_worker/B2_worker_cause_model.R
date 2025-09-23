@@ -287,21 +287,47 @@ if (nrow(df_cause) == 0L) {
       next
     }
     
-    # # Create model that has all "has_" variables (EXPERIMENTAL - NOT IMPLEMENTED)
-    # has_vars <- grep("^has_", names(df_boot), value = TRUE)
-    # has_vars <- has_vars[5:length(has_vars)]
-    #
+    # # Top-K "has_" cause variables - create model that has top-k "has_" variables (EXPERIMENTAL)
+    # top_k_cause_list <- c(
+    #   "has__rf","has_cvd","has__otherncd","has_diab_ckd","has_msk","has__neo","has_digest","has_resp",
+    #   "has_skin","has__ri","has__sense","has__well","has__neuro","has__mental","has__unintent"
+    # )
+    # 
+    # # has_vars <- grep("^has_", names(df_boot), value = TRUE)
+    # # has_vars <- has_vars[5:length(has_vars)] # removes has_hiv, has_sud, has_hepc, has_cost
+    # # has_vars <- has_vars[!grepl(paste0("has_*", cause_name), has_vars)] # removes current cause_name
+    # 
+    # filtered_top_k_cause_list <- top_k_cause_list[!grepl(paste0("has_*", cause_name), top_k_cause_list)] # removes current cause_name
+    # 
     # rhs_gamma_formula <- paste(
-    #   c("has_hiv * has_sud", "race_cd", "sex_id", "cause_count", has_vars),
+    #   c("has_hiv * has_sud", "race_cd", "sex_id + cause_count_minus_top_k", filtered_top_k_cause_list),
     #   collapse = " + "
     # )
-    #
+    # 
     # gamma_formula <- as.formula(paste(
-    #   "tot_pay_amt ~ -1 +", rhs_gamma_formula
+    #   "tot_pay_amt ~ ", rhs_gamma_formula
     # ))
-    # mod_gamma <-glm(gamma_formula)
 
-    # Gamma Model - Gamma on positive costs (truncate 99.5%)
+    # Gamma Model - Gamma on positive costs (truncate 99.5%) (EXPERIMENTAL ADDING IN ALL "has_*" variables, excluding current cause)
+    
+    # df_gamma_input <- df_boot[tot_pay_amt > 0]
+    # df_gamma_input[, cause_count_minus_top_k :=
+    #                  cause_count - rowSums(as.data.frame(lapply(.SD, function(x) as.numeric(as.character(x))))),
+    #                .SDcols = filtered_top_k_cause_list] # This creates the cause_count_minus_top_k amount
+    # if (nrow(df_gamma_input) < 10) {
+    #   cat("[", cause_name, "] Skip iter ", b, " - too few positive costs\n", sep = ""); next
+    # }
+    # df_gamma_input[, tot_pay_amt := pmin(tot_pay_amt, quantile(tot_pay_amt, 0.995, na.rm = TRUE))]
+    # mod_gamma <- try(glm(
+    #   gamma_formula,
+    #   data = df_gamma_input, family = Gamma(link = "log"),
+    #   control = glm.control(maxit = 100)
+    # ), silent = TRUE)
+    # if (inherits(mod_gamma, "try-error")) {
+    #   cat("[", cause_name, "] Skip iter ", b, " - gamma failed\n", sep = ""); next
+    # }
+    
+    # Gamma Model - Gamma on positive costs (truncate 99.5%) (Does NOT include the "has_*" cause name variables, OLD METHOD)
     
     df_gamma_input <- df_boot[tot_pay_amt > 0]
     if (nrow(df_gamma_input) < 10) {
@@ -316,7 +342,6 @@ if (nrow(df_cause) == 0L) {
     if (inherits(mod_gamma, "try-error")) {
       cat("[", cause_name, "] Skip iter ", b, " - gamma failed\n", sep = ""); next
     }
-    
     
     # Counterfactual testing - Create four scenarios on the bootstrap sample and make model predictions × {HIV(0,1) × SUD(0,1)}
     sc00 <- predict_scenario(df_gamma_input, "0", "0", mod_gamma, "cost_neither")

@@ -76,7 +76,7 @@ if (Sys.info()["sysname"] == 'Linux'){
 ## 0.1) Read args / data
 ##---------------------------
 if (interactive()) {
-  date_or_bested <- "20250917" # set to "bested" if using bested folder, otherwise set date
+  date_or_bested <- "bested" # set to "bested" if using bested folder, otherwise set date
   path <- paste0("/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/", date_or_bested, "/aggregated_by_year/compiled_RX_data_2010_age60.parquet")
   df <- open_dataset(path) %>% collect() %>% as.data.table()
   year_id <- df$year_id[1]
@@ -84,7 +84,7 @@ if (interactive()) {
   age_group_years_start <- df$age_group_years_start[1]
   bootstrap_iterations_F2T <- 10
   bootstrap_iterations_RX  <- 10
-  cause_name <- "_subs"            # <— set a single cause for local testing (hiv or _subs)
+  cause_name <- "hiv"            # <— set a single cause for local testing (hiv or _subs)
   
   fp_input <- path # sets this for message output if needed
 } else {
@@ -288,6 +288,32 @@ for (b in seq_len(B)) {
   # One stratified resample (size-preserving within each stratum)
   df_boot <- df_cause[, .SD[sample(.N, .N, replace = TRUE)], by = by_keys]
   
+  # # Top-K "has_" cause variables - create model that has top-k "has_" variables (EXPERIMENTAL)
+  # top_k_cause_list <- c(
+  #   "has__rf","has_cvd","has__otherncd","has_diab_ckd","has_msk","has__neo","has_digest","has_resp",
+  #   "has_skin","has__ri","has__sense","has__well","has__neuro","has__mental","has__unintent"
+  # )
+  # 
+  # # has_vars <- grep("^has_", names(df_boot), value = TRUE)
+  # # has_vars <- has_vars[5:length(has_vars)] # removes has_hiv, has_sud, has_hepc, has_cost
+  # # has_vars <- has_vars[!grepl(paste0("has_*", cause_name), has_vars)] # removes current cause_name
+  # 
+  # filtered_top_k_cause_list <- top_k_cause_list[!grepl(paste0("has_*", cause_name), top_k_cause_list)] # removes current cause_name
+  # 
+  # if (identical(cause_name, "hiv")) {
+  #   rhs_gamma_formula <- paste(
+  #     c("has_sud", "race_cd", "sex_id + cause_count_minus_top_k", filtered_top_k_cause_list),
+  #     collapse = " + ")
+  # } else if (identical(cause_name, "_subs")){
+  #   rhs_gamma_formula <- paste(
+  #     c("has_hiv", "race_cd", "sex_id + cause_count_minus_top_k", filtered_top_k_cause_list),
+  #     collapse = " + ")
+  # }
+  # 
+  # gamma_formula <- as.formula(paste(
+  #   "tot_pay_amt ~ ", rhs_gamma_formula
+  # ))
+  
   # ---------------- HIV section ----------------
   if (identical(cause_name, "hiv")) {
     
@@ -299,12 +325,16 @@ for (b in seq_len(B)) {
     
     # Gamma Model
     df_gamma_input <- df_boot[tot_pay_amt > 0]
+    df_gamma_input[, cause_count_minus_top_k :=
+                     cause_count - rowSums(as.data.frame(lapply(.SD, function(x) as.numeric(as.character(x))))),
+                   .SDcols = filtered_top_k_cause_list] # This creates the cause_count_minus_top_k amount
     if (nrow(df_gamma_input) < 10) {
       cat("[", cause_name, "] Skip iter ", b, " - too few positive costs\n", sep = ""); next
     }
     df_gamma_input[, tot_pay_amt := pmin(tot_pay_amt, quantile(tot_pay_amt, 0.995, na.rm = TRUE))]
     mod_gamma <- try(glm(
-      tot_pay_amt ~ has_sud + race_cd + sex_id + cause_count,
+      tot_pay_amt ~ has_sud + race_cd + sex_id + cause_count, # Old Gamma Model (doesn't include "has_*" columns)
+      # gamma_formula,
       data = df_gamma_input, family = Gamma(link = "log"),
       control = glm.control(maxit = 100)
     ), silent = TRUE)
@@ -436,7 +466,8 @@ for (b in seq_len(B)) {
     }
     df_gamma_input[, tot_pay_amt := pmin(tot_pay_amt, quantile(tot_pay_amt, 0.995, na.rm = TRUE))]
     mod_gamma <- try(glm(
-      tot_pay_amt ~ has_hiv + race_cd + sex_id + cause_count,
+      # tot_pay_amt ~ has_hiv + race_cd + sex_id + cause_count, # Old Method, doesn't include "has_*" variables
+      gamma_formula,
       data = df_gamma_input, family = Gamma(link = "log"),
       control = glm.control(maxit = 100)
     ), silent = TRUE)

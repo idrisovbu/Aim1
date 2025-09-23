@@ -18,7 +18,7 @@ date_today <- format(Sys.time(), "%Y%m%d")
 # Detect IHME cluster by checking for /mnt/share/limited_use
 if (dir.exists("/mnt/share/limited_use")) {
   # IHME/cluster environment
-  date_of_input <- "bested" # last run on 20250914
+  date_of_input <- "20250922" # last run on 20250914
   base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/"
   input_dir <- file.path(base_dir, "05.Aggregation_Summary", date_of_input)
   figures_dir <- file.path(base_dir, "06.Figures")
@@ -1022,7 +1022,7 @@ p18 <- ggplot(df_f18 %>% filter(cost_type == "HIV") %>% filter(toc != "IP"), aes
 
 p18_plotly <- ggplotly(p18, tooltip = c("year_id", "mean_cost", "toc", "Level 2 Cause"))
 
-p18_plotly
+
 
 # 19 - HIV, IP
 p19 <- ggplot(df_f18 %>% filter(cost_type == "HIV") %>% filter(toc == "IP"), aes(x = year_id, y = mean_cost, color = toc, group = toc)) +
@@ -1037,7 +1037,7 @@ p19 <- ggplot(df_f18 %>% filter(cost_type == "HIV") %>% filter(toc == "IP"), aes
 
 p19_plotly <- ggplotly(p19, tooltip = c("year_id", "mean_cost", "toc", "Level 2 Cause"))
 
-p19_plotly
+
 
 # 20 - SUD, all toc except IP
 p20 <- ggplot(df_f18 %>% filter(cost_type == "SUD") %>% filter(toc != "IP"), aes(x = year_id, y = mean_cost, color = toc, group = toc)) +
@@ -1052,7 +1052,7 @@ p20 <- ggplot(df_f18 %>% filter(cost_type == "SUD") %>% filter(toc != "IP"), aes
 
 p20_plotly <- ggplotly(p20, tooltip = c("year_id", "mean_cost", "toc", "Level 2 Cause"))
 
-p20_plotly
+
 
 # 21 - SUD, IP
 p21 <- ggplot(df_f18 %>% filter(cost_type == "SUD") %>% filter(toc == "IP"), aes(x = year_id, y = mean_cost, color = toc, group = toc)) +
@@ -1067,7 +1067,6 @@ p21 <- ggplot(df_f18 %>% filter(cost_type == "SUD") %>% filter(toc == "IP"), aes
 
 p21_plotly <- ggplotly(p21, tooltip = c("year_id", "mean_cost", "toc", "Level 2 Cause"))
 
-p21_plotly
 
 # Save Plots
 saveWidget(p18_plotly, file.path(output_dir, "F18.SS_per_enc_hiv_all_no_ip.html"), selfcontained = TRUE)
@@ -1163,7 +1162,6 @@ p_test <- ggplot(df_test %>% filter(cause_name_lvl2 == cause_filter), aes(x = ye
   labs(title = paste0("Total Unique Beneficiares - ", cause_filter))
 
 p_test_plotly <- ggplotly(p_test, tooltip = c("year_id", "toc", "total_unique_bene"))
-p_test_plotly
 saveWidget(p_test_plotly, file.path(output_dir, "unique_bene_hiv.html"), selfcontained = TRUE)
 
 # Avg cost per encounter per year by type of care ########## Interesting plot!
@@ -1191,7 +1189,6 @@ p_test <- ggplot(df_test %>% filter(toc != "IP") %>% filter(has_sud == 0), aes(x
 #+facet_wrap(~toc)
 
 p_test_plotly <- ggplotly(p_test, tooltip = c("year_id", "toc", "avg_encounters_per_bene", "avg_cost_per_encounter"))
-p_test_plotly
 saveWidget(p_test_plotly, file.path(output_dir, "avg_encounters_per_bene_hiv_no_ip.html"), selfcontained = TRUE)
 
 
@@ -1207,38 +1204,110 @@ p_test <- ggplot(df_test %>% filter(toc == "IP") %>% filter(has_sud == 0), aes(x
 #+facet_wrap(~toc)
 
 p_test_plotly <- ggplotly(p_test, tooltip = c("year_id", "toc", "avg_encounters_per_bene", "avg_cost_per_encounter"))
-p_test_plotly
+
 saveWidget(p_test_plotly, file.path(output_dir, "avg_encounters_per_bene_hiv_ip.html"), selfcontained = TRUE)
 
 # TEST FIGURE 14-B PLOTTING MODEL DATA FOR HIV / HIV + SUD OVER TIME AGAINST SUMMARIZED DATA
 
-# ---- Prep tidy data ----------------------------------------------------
-# Model (has mean + CI)
+## =========================
+## HIV vs HIV+SUD — Model vs Summary + IP share + TOC shares (self-contained)
+## =========================
+
+
+## ------------------------------------------------------------
+## Load inputs if not present in session
+## (expects `input_dir` defined in your script; if not, set it)
+## ------------------------------------------------------------
+if (!exists("input_dir")) {
+  # <- set this if you're running standalone
+  # input_dir <- "/path/to/05.Aggregation_Summary/bested"  # example
+  stop("`input_dir` not found. Please set `input_dir` to your CSV folder before running.")
+}
+
+# Model tables (05.*)
+if (!exists("df_hiv_master")) {
+  df_hiv_master <- read_csv(file.path(input_dir, "05.HIV_inflation_adjusted_aggregated.csv"),
+                            show_col_types = FALSE)
+}
+
+# Summary statistics table (01.*)
+if (!exists("df_ss")) {
+  df_ss <- read_csv(file.path(input_dir, "01.Summary_Statistics_inflation_adjusted_aggregated.csv"),
+                    show_col_types = FALSE)
+}
+
+## ------------------------------------------------------------
+## MODEL DATA (aggregate across race/age using row counts as weights)
+## ------------------------------------------------------------
+df_hiv_model <- df_hiv_master %>%
+  group_by(year_id) %>%
+  summarise(
+    mean_cost_hiv      = weighted.mean(mean_cost_hiv,      w = total_row_count, na.rm = TRUE),
+    lower_ci_hiv       = weighted.mean(lower_ci_hiv,       w = total_row_count, na.rm = TRUE),
+    upper_ci_hiv       = weighted.mean(upper_ci_hiv,       w = total_row_count, na.rm = TRUE),
+    mean_cost_hiv_sud  = weighted.mean(mean_cost_hiv_sud,  w = total_row_count, na.rm = TRUE),
+    lower_ci_hiv_sud   = weighted.mean(lower_ci_hiv_sud,   w = total_row_count, na.rm = TRUE),
+    upper_ci_hiv_sud   = weighted.mean(upper_ci_hiv_sud,   w = total_row_count, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Tidy model frame with mean + CI per group
+df_plot <- bind_rows(
+  df_hiv_model %>%
+    transmute(year_id = as.integer(year_id),
+              group   = "HIV",
+              mean    = mean_cost_hiv,
+              lower   = lower_ci_hiv,
+              upper   = upper_ci_hiv),
+  df_hiv_model %>%
+    transmute(year_id = as.integer(year_id),
+              group   = "HIV + SUD",
+              mean    = mean_cost_hiv_sud,
+              lower   = lower_ci_hiv_sud,
+              upper   = upper_ci_hiv_sud)
+)
+
+## ------------------------------------------------------------
+## SUMMARY STATS (SS) data in the same tidy shape (means only)
+## ------------------------------------------------------------
+df_hiv_ss <- df_ss %>%
+  filter(acause_lvl2 == "hiv") %>%
+  group_by(acause_lvl2, year_id, has_hiv, has_sud) %>%
+  summarise(mean_cost = weighted.mean(avg_cost_per_bene, w = total_unique_bene, na.rm = TRUE),
+            .groups = "drop")
+
+df_hiv_ss <- df_hiv_ss %>%
+  mutate(cost_type = case_when(
+    has_hiv == 1 & has_sud == 0 ~ "HIV",
+    has_hiv == 1 & has_sud == 1 ~ "HIV + SUD",
+    TRUE ~ NA_character_
+  )) %>%
+  filter(!is.na(cost_type)) %>%
+  select(year_id, mean_cost, cost_type)
+
+## ------------------------------------------------------------
+## Nice combined plot: Model vs Summary (same color by condition,
+## source distinguished by linetype/shape; model has CI ribbons)
+## ------------------------------------------------------------
 df_model <- df_plot %>%
   mutate(source = "Model",
-         group  = factor(group, levels = c("HIV","HIV + SUD")))
+         group  = factor(group, levels = c("HIV", "HIV + SUD")))
 
-# Summary stats (mean only)
 df_ss_line <- df_hiv_ss %>%
   mutate(source = "Summary",
-         group  = factor(cost_type, levels = c("HIV","HIV + SUD"))) %>%
-  transmute(year_id = as.integer(year_id),
-            group, source, mean = mean_cost)
+         group  = factor(cost_type, levels = c("HIV", "HIV + SUD"))) %>%
+  transmute(year_id = as.integer(year_id), group, source, mean = mean_cost)
 
-# Palettes: same color per condition; style varies by source
 cond_cols <- c("HIV" = "#2C7BB6", "HIV + SUD" = "#D7191C")
-src_lty   <- c("Model" = "solid", "Summary" = "22")    # dashed
-src_shp   <- c("Model" = 16, "Summary" = 17)           # filled circle vs triangle
+src_lty   <- c("Model" = "solid", "Summary" = "22")
+src_shp   <- c("Model" = 16,      "Summary" = 17)
 
-## ---- Plot ---------------------------------------------------------------
 hiv_model_summary <- ggplot() +
-  # 95% CI ribbons (model only)
   geom_ribbon(
     data = df_model,
     aes(x = year_id, ymin = lower, ymax = upper, fill = group),
     alpha = 0.15, color = NA
   ) +
-  # Model: solid line + filled points
   geom_line(
     data = df_model,
     aes(x = year_id, y = mean, color = group, linetype = source),
@@ -1249,7 +1318,6 @@ hiv_model_summary <- ggplot() +
     aes(x = year_id, y = mean, color = group, shape = source),
     size = 2.5
   ) +
-  # Summary: dashed line + different point shape
   geom_line(
     data = df_ss_line,
     aes(x = year_id, y = mean, color = group, linetype = source),
@@ -1264,7 +1332,7 @@ hiv_model_summary <- ggplot() +
   scale_fill_manual(values  = cond_cols, guide = "none") +
   scale_linetype_manual(values = src_lty, name = "Source") +
   scale_shape_manual(values   = src_shp, name = "Source") +
-  scale_y_continuous(labels = scales::dollar_format()) +
+  scale_y_continuous(labels = dollar_format()) +
   scale_x_continuous(breaks = sort(unique(df_model$year_id))) +
   labs(
     title    = "HIV vs HIV + SUD — Modeled vs Summary Over Time",
@@ -1279,88 +1347,96 @@ hiv_model_summary <- ggplot() +
     panel.grid.minor = element_blank()
   )
 
-save_plot(hiv_model_summary, "hiv_model_summary_over_time.png")
+save_plot(hiv_model_summary, "hiv_model_summary_over_time")
 
-
-
-
-
-
-
-
-##########################################################################
-# Figure XX: Share of IP encounters among all HIV encounters over time
-# Numerator: IP encounters (sum of avg_encounters_per_bene * total_unique_bene)
-# Denominator: All encounters across all types of care
-##########################################################################
-
-# If df_ss isn't already loaded above, uncomment:
-# df_ss <- read.csv(file = file.path(input_dir, "01.Summary_Statistics_inflation_adjusted_aggregated.csv"))
-
+## ------------------------------------------------------------
+## Figure: Share of IP encounters among all HIV encounters over time
+## encounters = avg_encounters_per_bene * total_unique_bene
+## ------------------------------------------------------------
 df_hiv_ip_prop <- df_ss %>%
-  # Keep HIV cause and HIV patients
   filter(acause_lvl2 == "hiv", has_hiv == 1) %>%
-  # Optional: uncomment one of these if you want HIV-only or HIV+SUD only
-  # filter(has_sud == 0) %>%  # HIV-only
-  # filter(has_sud == 1) %>%  # HIV + SUD
-  mutate(
-    # total encounters (per row) = avg encounters per bene * number of bene
-    encounters = avg_encounters_per_bene * total_unique_bene
-  ) %>%
+  mutate(encounters = avg_encounters_per_bene * total_unique_bene) %>%
   group_by(year_id, toc) %>%
   summarise(encounters = sum(encounters, na.rm = TRUE), .groups = "drop") %>%
   group_by(year_id) %>%
-  mutate(
-    total_encounters_all_toc = sum(encounters, na.rm = TRUE),
-    prop_ip = if_else(toc == "IP" & total_encounters_all_toc > 0,
-                      encounters / total_encounters_all_toc,
-                      NA_real_)
-  ) %>%
+  mutate(total_encounters_all_toc = sum(encounters, na.rm = TRUE),
+         prop_ip = if_else(toc == "IP" & total_encounters_all_toc > 0,
+                           encounters / total_encounters_all_toc, NA_real_)) %>%
   ungroup() %>%
   filter(toc == "IP") %>%
   arrange(year_id)
 
-# Quick sanity check (optional): should be in [0,1]
-# summary(df_hiv_ip_prop$prop_ip)
-
 p_hiv_ip_share <- ggplot(df_hiv_ip_prop,
                          aes(x = as.integer(year_id), y = prop_ip, group = 1)) +
-  geom_line(color = "#2b8cbe", size = 1.2) +
+  geom_line(color = "#2b8cbe", linewidth = 1.2) +
   geom_point(color = "#2b8cbe", size = 2) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) +
   scale_x_continuous(breaks = sort(unique(as.integer(df_hiv_ip_prop$year_id)))) +
   labs(
     title = "Share of IP Encounters Among All HIV Encounters Over Time",
-    subtitle = "Medicare beneficiaries 65–85; SS data; encounters = avg_encounters_per_bene × total_unique_bene",
-    x = "Year",
-    y = "IP Share of HIV Encounters"
+    subtitle = "SS data; encounters = avg_encounters_per_bene × total_unique_bene",
+    x = "Year", y = "IP Share of HIV Encounters"
   ) +
   theme_minimal(base_size = 13) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-# Save PNG with your helper
 save_plot(p_hiv_ip_share, "FXX.HIV_IP_share_over_time")
 
-# # (Optional) interactive Plotly version
-# p_hiv_ip_share_plotly <- ggplotly(
-#   p_hiv_ip_share,
-#   tooltip = c("x", "y")
-# )
-# saveWidget(p_hiv_ip_share_plotly, file.path(output_dir, "FXX.HIV_IP_share_over_time.html"), selfcontained = TRUE)
-# 
-# 
+## ------------------------------------------------------------
+## Figure: Share of encounters by Type of Care among HIV encounters
+## (facet each TOC; independent y scales)
+## ------------------------------------------------------------
+df_hiv_toc_share <- df_ss %>%
+  filter(acause_lvl2 == "hiv", has_hiv == 1) %>%
+  mutate(encounters = avg_encounters_per_bene * total_unique_bene) %>%
+  group_by(year_id, toc) %>%
+  summarise(encounters = sum(encounters, na.rm = TRUE), .groups = "drop_last") %>%
+  group_by(year_id) %>%
+  mutate(total = sum(encounters, na.rm = TRUE),
+         prop_toc = if_else(total > 0, encounters / total, NA_real_)) %>%
+  ungroup()
+
+p_toc_facets <- ggplot(df_hiv_toc_share,
+                       aes(x = as.integer(year_id), y = prop_toc, group = 1)) +
+  geom_line(color = "#2b8cbe", linewidth = 1) +
+  geom_point(color = "#2b8cbe", size = 2) +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) +
+  scale_x_continuous(breaks = sort(unique(as.integer(df_hiv_toc_share$year_id)))) +
+  labs(
+    title = "Share of Encounters by Type of Care among HIV Encounters",
+    subtitle = "SS data; each facet has its own y-scale",
+    x = "Year", y = "Share of Encounters"
+  ) +
+  facet_wrap(~ toc, scales = "free_y", ncol = 3) +
+  theme_minimal(base_size = 13) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Optional: interactive
+p_toc_facets_plotly <- ggplotly(p_toc_facets, tooltip = c("x", "y"))
+
+# Save static PNG
+save_plot(p_toc_facets, "FXXd.HIV_encounter_share_by_TOC_facets")
 
 
+## ------------------------------------------------------------
+## Figure: Stacked area — share of encounters by TOC among HIV encounters
+## ------------------------------------------------------------
 
-##########################################################################
-# Figure XX-c: Stacked area — share of encounters by TOC among HIV encounters
-##########################################################################
+df_hiv_toc_share <- df_ss %>%
+  filter(acause_lvl2 == "hiv", has_hiv == 1) %>%
+  mutate(encounters = avg_encounters_per_bene * total_unique_bene) %>%
+  group_by(year_id, toc) %>%
+  summarise(encounters = sum(encounters, na.rm = TRUE), .groups = "drop_last") %>%
+  group_by(year_id) %>%
+  mutate(total = sum(encounters, na.rm = TRUE),
+         prop_toc = if_else(total > 0, encounters / total, NA_real_)) %>%
+  ungroup()
 
 p_hiv_toc_share_area <- ggplot(
   df_hiv_toc_share,
   aes(x = as.integer(year_id), y = prop_toc, fill = toc)
 ) +
-  geom_area(alpha = 0.85, color = "white", size = 0.2) +
+  geom_area(alpha = 0.9, color = "white", size = 0.2) +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1)) +
   scale_x_continuous(breaks = sort(unique(as.integer(df_hiv_toc_share$year_id)))) +
   labs(
@@ -1373,45 +1449,12 @@ p_hiv_toc_share_area <- ggplot(
 
 save_plot(p_hiv_toc_share_area, "FXXc.HIV_encounter_share_by_TOC_area")
 
-# # (Optional) interactive stacked area (plotly converts area to filled traces)
+# Optional interactive
 # p_hiv_toc_share_area_plotly <- ggplotly(
 #   p_hiv_toc_share_area,
 #   tooltip = c("x", "y", "fill")
 # )
-# saveWidget(p_hiv_toc_share_area_plotly, file.path(output_dir, "FXXc.HIV_encounter_share_by_TOC_area.html"), selfcontained = TRUE)
-
-##########################################################################
-# Figure XX-b: Share of encounters by Type of Care among HIV encounters
-# (lines for each TOC over time) # facets w/ independent y-axes
-##########################################################################
-
-p_toc_facets <- ggplot(df_hiv_toc_share,
-                       aes(x = as.integer(year_id), y = prop_toc, group = 1)) +
-  geom_line(color = "#2b8cbe", size = 1) +
-  geom_point(color = "#2b8cbe", size = 2) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
-  scale_x_continuous(breaks = sort(unique(as.integer(df_hiv_toc_share$year_id)))) +
-  labs(
-    title = "Care Utilization by care type (HIV patients)",
-    subtitle = "Share of Encounters by Type of Care",
-    x = "Year", y = "Share of Encounters"
-  ) +
-  facet_wrap(~ toc, scales = "free_y", ncol = 3) +
-  theme_minimal(base_size = 13) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-p_toc_facets_plotly <- ggplotly(
-  p_toc_facets,
-  tooltip = c("x", "y")
-)
-
-# saveWidget(p_toc_facets_plotly,
-#            file.path(output_dir, "FXXd.HIV_encounter_share_by_TOC_facets.html"),
+# saveWidget(p_hiv_toc_share_area_plotly,
+#            file.path(output_dir, "FXXc.HIV_encounter_share_by_TOC_area.html"),
 #            selfcontained = TRUE)
-# 
-# 
 
-
-
-
-#
