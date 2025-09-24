@@ -37,6 +37,10 @@ df_files <- data.frame(directory = input_files) %>%
   filter(!is.na(year_id)) %>%
   filter(year_id %in% c(2010, 2014, 2015, 2016, 2019))
 
+df_files_pivot <- df_files %>%
+  pivot_wider(names_from = c(file_type, age_group_years_start),
+              values_from = directory)
+
 # Define causes to run (safe to hardcode; worker will skip if absent)
 causes_to_run <- c(
   "_enteric_all","_infect","_intent","_mental","_neo","_neuro","_ntd","_otherncd",
@@ -48,7 +52,7 @@ causes_to_run <- c(
 df_causes <- data.frame(cause_name = causes_to_run, stringsAsFactors = FALSE)
 
 # Cross join files x causes
-df_params <- tidyr::crossing(df_files, df_causes)
+df_params <- tidyr::crossing(df_causes, df_files_pivot)
 
 # Write params CSV
 param_dir <- file.path(l, "LU_CMS/DEX/hivsud/aim1/resources_aim1/")
