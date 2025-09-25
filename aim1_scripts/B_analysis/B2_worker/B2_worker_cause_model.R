@@ -51,7 +51,6 @@
 ##----------------------------------------------------------------
 # 0 Clear environment and set library paths
 ##----------------------------------------------------------------
-
 rm(list = ls())
 pacman::p_load(arrow, dplyr, openxlsx, RMySQL, data.table, ini, DBI, tidyr, openxlsx,glmnet, broom)
 library(lbd.loader, lib.loc = sprintf("/share/geospatial/code/geospatial-libraries/lbd.loader-%s", R.version$major))
@@ -79,44 +78,45 @@ if (Sys.info()["sysname"] == 'Linux'){
 ##---------------------------
 if (interactive()) {
   # Parameters file
-  df_params <- read.csv("/ihme/limited_use//LU_CMS/DEX/hivsud/aim1/resources_aim1//B1_two_part_model_parameters_aim1_BY_CAUSE.csv")
+  fp_parameters_input <- "/ihme/limited_use//LU_CMS/DEX/hivsud/aim1/resources_aim1//B1_two_part_model_parameters_aim1_BY_CAUSE.csv"
+  df_params <- read.csv(fp_parameters_input)
   
-  i <- 1
-  year_id <- df_params$year_id[i]
-  cause_name <- df_params$cause_name[i]
+  a <- 1
+  year_id <- df_params$year_id[a]
+  cause_name <- df_params$cause_name[a]
   bootstrap_iterations <- 10
+  model_type <- "has_all"
   
   # List out all F2T & RX filepaths by age group
-  list_files <- unlist(as.list(df_params[i, 3:ncol(df_params)]))
+  list_files <- unlist(as.list(df_params[a, 3:ncol(df_params)]))
 
 } else {
   args <- commandArgs(trailingOnly = TRUE)
-  fp_parameters_input       <- args[1]
-  bootstrap_iterations  <- as.integer(args[2])
   
   array_job_number <- as.integer(Sys.getenv("SLURM_ARRAY_TASK_ID"))
   message("SLURM Job ID: ", array_job_number)
   
-  df_parameters <- fread(fp_parameters_input)
-  df_job <- df_parameters[array_job_number, ]
-  
-  fp_input    <- df_job$directory
-  file_type   <- df_job$file_type
+  fp_parameters_input <- args[1]
+  df_params <- fread(fp_parameters_input)
+  df_job <- df_params[array_job_number, ]
+ 
   year_id     <- df_job$year_id
-  cause_name  <- df_job$cause_name              # <— single cause per array task
+  cause_name  <- df_job$cause_name 
+  bootstrap_iterations  <- as.integer(args[2])
+  model_type <- args[3]
   
-  df <- read_parquet(fp_input) %>% as.data.table()
-  age_group_years_start <- df$age_group_years_start[1]
+  # List out all F2T & RX filepaths by age group
+  list_files <- unlist(as.list(df_params[array_job_number, 3:ncol(df_params)]))
 }
 
 ##---------------------------
 ## 1) Functions / Helpers
 ##---------------------------
 ensure_dir_exists <- function(d) if (!dir.exists(d)) dir.create(d, recursive = TRUE)
+
 generate_filename <- function(prefix, extension, cause = NULL) {
   cpart <- if (is.null(cause)) "" else paste0("_", slugify(cause))
-  paste0(prefix, cpart, "_", file_type, "_year", year_id,
-         "_age", age_group_years_start, extension)
+  paste0(prefix, cpart, "_year", year_id, extension)
 }
 
 slugify <- function(x) {
@@ -230,6 +230,9 @@ for (i in 1:length(list_files)) {
   
   # Add to df list
   list_df[[i]] <- dt
+  
+  # cleanup
+  rm(dt)
 }
 
 # Combine dataframes into one cause df, all age groups
@@ -289,13 +292,13 @@ df[, `:=`(
 # --- Setup for a single cause run -------------------------------
 cat("\n=== Running cause:", cause_name, "===\n")
 
-# Make output filepaths
+# --- Set directories
 paths <- make_cause_dirs(cause_name) 
 bootstrap_chunks_output_folder                 <- paths$boot_dir
 results_output_folder                          <- paths$results_dir
 regression_coefficients_output_folder          <- paths$regression_dir
 
-# Clean old chunks (parquet only)
+# Clean old chunks
 old_files <- list.files(bootstrap_chunks_output_folder, pattern = "\\.parquet$", full.names = TRUE)
 if (length(old_files) > 0L) unlink(old_files, force = TRUE)
 
@@ -322,12 +325,6 @@ list_regression <- list()
 # --- Bootstrap --------------------------------------------------------------
 # Set seed
 set.seed(123)
-
-# Set model type
-# "has_all"  uses all "has_*" cause name binary values as part of the model (does not use cause_count)
-# "topk" uses top 16 most common causes, decided by total row count, + cause_count_minus_top_k as part of the model
-# "cause_count" is just the plain "tot_pay_amt ~ has_hiv * has_sud + race_cd + sex_id + age_group_years_start + cause_count" model
-model_type <- "has_all" 
 
 # Loop through bootstrap iterations
 kept_iters <- 0L
@@ -589,7 +586,7 @@ if (kept_iters == 0L) {
     # Combine regression outputs and save as parquet
     df_regression_outputs <- do.call(rbind, list_regression)
     
-    file_out_regression <- generate_filename("regression_results", ".parquet")
+    file_out_regression <- generate_filename("regression_results", ".parquet", cause = cause_name)
     out_path_regression <- file.path(regression_coefficients_output_folder, file_out_regression)
     write_parquet(df_regression_outputs, out_path_regression)
     cat("✅ Regression coefficients saved to:", out_path_regression, "\n")

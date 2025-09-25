@@ -64,22 +64,25 @@ fwrite(df_params, fp_parameters)
 user        <- Sys.info()[["user"]]
 script_path <- file.path(h, "repo/Aim1/aim1_scripts/B_analysis/B2_worker/B2_worker_cause_model_hivsud.R")
 
-
 # Create log directory with date subfolder
 log_date <- format(Sys.Date(), "%Y%m%d")   # e.g., "20250818"
 log_dir  <- file.path(l, "LU_CMS/DEX/hivsud/aim1/B_analysis/logs", log_date)
 dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
 
+# Set bootstrap iterations
+bootstrap_iterations <- 5
 
-bootstrap_iterations_F2T <- 15
-bootstrap_iterations_RX  <- 15
+# Set model type
+# "has_all"  uses all "has_*" cause name binary values as part of the model (does not use cause_count)
+# "topk" uses top 16 most common causes, decided by total row count, + cause_count_minus_top_k as part of the model
+# "cause_count" is just the plain "tot_pay_amt ~ has_hiv * has_sud + race_cd + sex_id + age_group_years_start + cause_count" model
+model_type <- "has_all" 
 
-#### was running 1 hour with these specs. 
-
+# Submit jobs
 jid <- SUBMIT_ARRAY_JOB(
   name       = "B1_cause_model_hivsud",
   script     = script_path,
-  args       = c(fp_parameters, bootstrap_iterations_F2T, bootstrap_iterations_RX),
+  args       = c(fp_parameters, bootstrap_iterations, model_type),
   error_dir  = log_dir,
   output_dir = log_dir,
   queue      = "all.q",
@@ -89,7 +92,7 @@ jid <- SUBMIT_ARRAY_JOB(
   time       = "01:00:00",    # adjust per dataset size/boots (4 hrs needed for 1000 bootstraps)
   user_email = paste0(user, "@uw.edu"),
   archive    = FALSE,
-  test       = F
+  test       = T
 )
 
 cat("Submitted", nrow(df_params), "array tasks.\n")
