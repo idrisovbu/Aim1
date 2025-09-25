@@ -89,10 +89,10 @@ jid <- SUBMIT_ARRAY_JOB(
   n_jobs     = nrow(df_params),
   memory     = "150G",         # often enough per cause; adjust if needed
   threads    = 1,
-  time       = "01:00:00",    # adjust per dataset size/boots (4 hrs needed for 1000 bootstraps)
+  time       = "01:00:00",    # adjust per dataset size/boots (~5 min for 5 bootstraps, old - 4 hrs needed for 1000 bootstraps)
   user_email = paste0(user, "@uw.edu"),
   archive    = FALSE,
-  test       = T
+  test       = F
 )
 
 cat("Submitted", nrow(df_params), "array tasks.\n")
