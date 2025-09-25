@@ -220,7 +220,7 @@ for (i in 1:nrow(data_dirs)) {
     unique_encounters = uniqueN(encounter_id),
     tot_pay_amt       = sum(tot_pay_amt, na.rm=TRUE),
     has_cost          = as.integer(sum(tot_pay_amt, na.rm=TRUE) > 0)
-  ), by = .(bene_id, st_resi, acause_lvl1, acause_lvl2, cause_name_lvl1, cause_name_lvl2,
+  ), by = .(bene_id, acause_lvl1, acause_lvl2, cause_name_lvl1, cause_name_lvl2,
             year_id, age_group_years_start, toc, race_cd, sex_id)]
   
   ##----------------------------------------------------------------
