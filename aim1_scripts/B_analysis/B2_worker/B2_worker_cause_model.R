@@ -282,7 +282,8 @@ df[, `:=`(
   acause_lvl2 = factor(acause_lvl2),
   race_cd     = factor(race_cd),
   sex_id      = factor(sex_id),
-  toc         = factor(toc)
+  toc         = factor(toc),
+  age_group_years_start = factor(age_group_years_start)
 )]
 
 ##---------------------------
