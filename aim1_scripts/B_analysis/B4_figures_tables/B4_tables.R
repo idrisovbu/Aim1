@@ -19,7 +19,7 @@ date_today <- format(Sys.time(), "%Y%m%d")
 # Detect IHME cluster by checking for /mnt/share/limited_use
 if (dir.exists("/mnt/share/limited_use")) {
   # IHME/cluster environment
-  date_of_input <- "20250925"
+  date_of_input <- "20251108"
   base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/"
   input_dir <- file.path(base_dir, "05.Aggregation_Summary", date_of_input)
   output_tables_dir <- file.path(base_dir, "07.Tables", date_today)
@@ -1064,6 +1064,9 @@ fwrite(df_tpe_t7, file.path(output_tables_dir, "TPE_T7_sud_by_race.csv"))
 ## 2.12 TPE_T8 - HIV / SUD all races all age groups combined, by year table
 ##
 ## This table uses the By-cause two part estimates
+
+# TODO - If wanting to make average of HIV + SUD & SUD + HIV, you would perform the weighted
+# average in this section by using the row count column from the aggregated data files (05.Aggregation_Summary)
 ##----------------------------------------------------------------
 
 # Set df

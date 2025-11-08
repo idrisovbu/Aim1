@@ -58,7 +58,7 @@ input_regression_estimates <- file.path(base_dir, "02.Regression_Estimates", dat
 date_meta_stats <- "20250925"
 input_meta_stats <- file.path(base_dir, "03.Meta_Statistics", date_meta_stats) 
 
-date_tpe <- "20250925"
+date_tpe <- "20251108"
 input_by_cause <- file.path(base_dir, "04.Two_Part_Estimates", date_tpe, "by_cause/results")
 
 # Define output directory

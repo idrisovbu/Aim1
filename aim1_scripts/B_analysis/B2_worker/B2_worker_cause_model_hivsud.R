@@ -175,6 +175,17 @@ predict_scenario <- function(dat, hiv_level, sud_level, model, nm) {
   tmp <- copy(dat)
   tmp[, has_hiv := factor(hiv_level, levels = levels(dat$has_hiv))]
   tmp[, has_sud := factor(sud_level, levels = levels(dat$has_sud))]
+  
+  # Set all "has_" level 2 diseases to 0 to isolate just the input disease cost
+  has_cols_0 <- c("has_hepc", "has_cvd", "has__otherncd", "has_digest", "has__mental",
+                  "has_msk", "has_skin", "has__sense", "has__well", "has_nutrition",
+                  "has_diab_ckd", "has__neuro", "has__rf", "has_resp", "has__ri",
+                  "has__neo", "has__infect", "has_inj_trans", "has__unintent",
+                  "has__intent", "has__enteric_all", "has_std", "has__ntd", "has_mater_neonat")
+  for (col in has_cols_0) {
+    tmp[[col]] <- factor("0", levels = c("0", "1"))
+  }
+  
   tmp[, pred_cost := predict(model, newdata = tmp, type = "response")]
   out <- tmp[, .(val = mean(pred_cost, na.rm = TRUE)),
              by = .(race_cd, sex_id, age_group_years_start)]
@@ -342,7 +353,7 @@ for (b in seq_len(bootstrap_iterations)) {
   # Model Type
   if (model_type == "has_all") {
             has_vars <- grep("^has_", names(df_boot), value = TRUE)
-            has_vars <- has_vars[5:length(has_vars)] # removes has_hiv, has_sud, has_cost, has_hepc
+            has_vars <- has_vars[4:length(has_vars)] # removes has_hiv, has_sud, has_cost
             has_vars <- has_vars[!grepl(paste0("has_*", cause_name), has_vars)] # removes current cause_name
             if (identical(cause_name, "hiv")) {
               rhs_gamma_formula <- paste(
