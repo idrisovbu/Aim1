@@ -19,7 +19,7 @@ date_today <- format(Sys.time(), "%Y%m%d")
 # Detect IHME cluster by checking for /mnt/share/limited_use
 if (dir.exists("/mnt/share/limited_use")) {
   # IHME/cluster environment
-  date_of_input <- "20250922"
+  date_of_input <- "20251108"
   base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/"
   input_dir <- file.path(base_dir, "05.Aggregation_Summary", date_of_input)
   output_tables_dir <- file.path(base_dir, "07.Tables", date_today)
@@ -1070,11 +1070,20 @@ fwrite(df_tpe_t7, file.path(output_tables_dir, "TPE_T7_sud_by_race.csv"))
 df_tpe_t8_hiv <- data_list$`05.HIV_subtable_by_year` %>%
   select(c("cause_name_lvl2", 
            "year_id", "mean_cost_hiv", "lower_ci_hiv", "upper_ci_hiv", "mean_cost_hiv_sud", 
-           "lower_ci_hiv_sud", "upper_ci_hiv_sud"))
+           "lower_ci_hiv_sud", "upper_ci_hiv_sud", "total_bin_count"))
 df_tpe_t8_sud <- data_list$`05.SUD_subtable_by_year` %>%
   select(c("cause_name_lvl2", 
            "year_id", "mean_cost_sud", "lower_ci_sud", "upper_ci_sud", "mean_cost_hiv_sud", 
-           "lower_ci_hiv_sud", "upper_ci_hiv_sud"))
+           "lower_ci_hiv_sud", "upper_ci_hiv_sud", "total_bin_count"))
+
+df_tpe_t8_avg <- rbind(df_tpe_t8_hiv %>% select(-c(mean_cost_hiv, lower_ci_hiv, upper_ci_hiv)),
+                       df_tpe_t8_sud %>% select(-c(mean_cost_sud, lower_ci_sud, upper_ci_sud)))
+
+df_tpe_t8_avg <- df_tpe_t8_avg %>%
+  group_by(year_id) %>%
+  summarise(mean_cost_hiv_sud_avg = weighted.mean(mean_cost_hiv_sud, w = total_bin_count),
+            lower_ci_hiv_sud_avg = weighted.mean(lower_ci_hiv_sud, w = total_bin_count),
+            upper_ci_hiv_sud_avg = weighted.mean(upper_ci_hiv_sud, w = total_bin_count))
 
 # Covert to dollar amounts
 for (col in colnames(df_tpe_t8_hiv)) {
@@ -1089,6 +1098,13 @@ for (col in colnames(df_tpe_t8_sud)) {
     next
   } else {
     df_tpe_t8_sud[[col]] <- dollar(df_tpe_t8_sud[[col]])
+  }
+}
+for (col in colnames(df_tpe_t8_avg)) {
+  if (col == "cause_name_lvl2" | col == "year_id" | col == "total_bin_count") {
+    next
+  } else {
+    df_tpe_t8_avg[[col]] <- dollar(df_tpe_t8_avg[[col]])
   }
 }
 
@@ -1111,8 +1127,17 @@ df_tpe_t8_sud <- df_tpe_t8_sud %>%
   setnames(old = c("year_id"),
            new = c("Year"))
 
+df_tpe_t8_avg <- df_tpe_t8_avg %>%
+  mutate(
+    `HIV | SUD Weighted Mean Cost CI` = paste0(mean_cost_hiv_sud_avg, " (", lower_ci_hiv_sud_avg, " - ", upper_ci_hiv_sud_avg, ")")
+  ) %>%
+  select(c("year_id", "HIV | SUD Weighted Mean Cost CI")) %>% 
+  setnames(old = c("year_id"),
+           new = c("Year"))
+
 # Combine dfs - Join on "Year" 
 df_tpe_t8 <- full_join(x = df_tpe_t8_hiv, y = df_tpe_t8_sud, by = c("Year"))
+df_tpe_t8 <- full_join(x = df_tpe_t8, y = df_tpe_t8_avg, by = c("Year"))
 
 # Save and output able as .csv
 fwrite(df_tpe_t8, file.path(output_tables_dir, "TPE_T8.csv"))

@@ -79,8 +79,8 @@ for (i in 1:nrow(data_dirs)) {
   # read in dataset
   dt <- open_dataset(dir) %>%
     filter(ENHANCED_FIVE_PERCENT_FLAG == "Y") %>% # Filters on 5% random sample column
-    filter(pri_payer == 1) %>%
-    filter(mc_ind == 0) %>%
+    filter(pri_payer == 1) %>% # These are set to strings in later pipeline runs, 1 here means "mdcr"
+    filter(mc_ind == 0) %>% # mc_ind == 0 means a lot of costs have 0 of spending, driving costs down
     select(bene_id, encounter_id, acause, primary_cause, race_cd, sex_id, tot_pay_amt, st_resi) %>%
     collect() %>%
     as.data.frame()
@@ -104,7 +104,7 @@ df <- rbindlist(df_list, use.names = TRUE, fill = TRUE)
 #########
 
 ##----------------------------------------------------------------
-## 1. Assign condition flags *before* filtering, then reattach later
+## 1. Assign condition flags *before* filtering
 ##----------------------------------------------------------------
 
 # Save beneficiary-level flags
@@ -113,13 +113,7 @@ sud_benes <- unique(
   df[acause %in% c("mental_alcohol", "mental_drug_agg", "mental_drug_opioids"), .(bene_id)][, has_sud := 1L])
 hepc_benes <- unique(df[acause == "hepatitis_c", .(bene_id)][, has_hepc := 1L])
 
-##----------------------------------------------------------------
-## 2. Filter to primary cause only
-##----------------------------------------------------------------
-# df <- df[primary_cause == 1] # Testing keeping all causes instead of just primary
-##----------------------------------------------------------------
-## 3a. Join flags back in
-##----------------------------------------------------------------
+# Join flags
 df <- merge(df, hiv_benes, by = "bene_id", all.x = TRUE)
 df <- merge(df, sud_benes, by = "bene_id", all.x = TRUE)
 df <- merge(df, hepc_benes, by = "bene_id", all.x = TRUE)
@@ -133,7 +127,7 @@ df[is.na(has_hepc), has_hepc := 0L]
 df <- df[race_cd %in% c("BLCK", "WHT", "HISP")]
 
 ##----------------------------------------------------------------
-## 3b. Acause maping per DEX categories
+## 2. Acause maping per DEX categories
 ##----------------------------------------------------------------
 
 # Define the mapping columns to avoid duplicates after the join
@@ -165,34 +159,11 @@ message("Mapping completed. Number of records: ", nrow(df))
 print(table(is.na(df$acause_lvl2)))   # Should be mostly FALSE (mapped), if many TRUE, join mismatch
 
 ##----------------------------------------------------------------
-## 4. Collapse to bene × disease category and attach metadata
-##----------------------------------------------------------------
-# Convert back to data.table if needed
-setDT(df)
-
-df <- df[, .(
-  has_hiv           = max(has_hiv, na.rm=TRUE),
-  has_sud           = max(has_sud, na.rm=TRUE),
-  has_hepc          = max(has_hepc, na.rm=TRUE),
-  unique_encounters = uniqueN(encounter_id),
-  tot_pay_amt       = sum(tot_pay_amt, na.rm=TRUE),
-  has_cost          = as.integer(sum(tot_pay_amt, na.rm=TRUE) > 0)
-), by = .(bene_id, st_resi, acause_lvl1, acause_lvl2, cause_name_lvl1, cause_name_lvl2,
-          year_id, age_group_years_start, toc, race_cd, sex_id)]
-
-
-desired_order <- c("bene_id", "st_resi", "acause_lvl2", "acause_lvl1", "cause_name_lvl1", "cause_name_lvl2",
-                   "year_id", "age_group_years_start", "race_cd", "sex_id", "toc",
-                   "has_hiv", "has_sud", "has_hepc", "has_cost", "unique_encounters", "tot_pay_amt")
-
-setcolorder(df, intersect(desired_order, names(df)))
-
-##----------------------------------------------------------------
-## 5. Add binary disease flag columns and unique disease count column per grouped bene
+## 3. Add binary disease flag columns and unique disease count column per grouped bene
 ##----------------------------------------------------------------
 cause_list <- c("_enteric_all","_infect","_intent","_mental","_neo","_neuro",
-  "_ntd","_otherncd","_rf","_ri","_sense","_subs","_unintent","_well","cvd","diab_ckd",
-  "digest","hiv","inj_trans","mater_neonat","msk","nutrition","resp", "skin", "std")
+                "_ntd","_otherncd","_rf","_ri","_sense","_subs","_unintent","_well","cvd","diab_ckd",
+                "digest","hiv","inj_trans","mater_neonat","msk","nutrition","resp", "skin", "std")
 
 # Create matrix of binary values for unique bene x has_<cause>
 df_cause_flags <- df %>%
@@ -214,11 +185,47 @@ df_cause_flags <- df_cause_flags %>%
 df_cause_flags <- df_cause_flags %>%
   mutate(cause_count = rowSums(across(colnames(df_cause_flags)[-1])))
 
-# Join data back with main df
-df <- df %>% left_join(df_cause_flags, by = "bene_id")
+##----------------------------------------------------------------
+## 4. Filter to primary cause only
+##----------------------------------------------------------------
+df <- df %>%
+  filter(primary_cause == 1)
 
 ##----------------------------------------------------------------
-## 6. Write to parquet file
+## 5. Collapse to bene × disease category and attach metadata
+##----------------------------------------------------------------
+# Convert back to data.table if needed
+setDT(df)
+
+df <- df[, .(
+  has_hiv           = max(has_hiv, na.rm=TRUE),
+  has_sud           = max(has_sud, na.rm=TRUE),
+  has_hepc          = max(has_hepc, na.rm=TRUE),
+  unique_encounters = uniqueN(encounter_id),
+  tot_pay_amt       = sum(tot_pay_amt, na.rm=TRUE),
+  has_cost          = as.integer(sum(tot_pay_amt, na.rm=TRUE) > 0)
+), by = .(bene_id, st_resi, acause_lvl1, acause_lvl2, cause_name_lvl1, cause_name_lvl2,
+          year_id, age_group_years_start, toc, race_cd, sex_id)]
+
+##----------------------------------------------------------------
+## 6. Join with binary disease flag df for "has_" column information for each bene
+##----------------------------------------------------------------
+df <- df %>% left_join(df_cause_flags, by = "bene_id")
+
+# Set column order
+desired_order <- c("bene_id", "st_resi", "acause_lvl2", "acause_lvl1", "cause_name_lvl1", "cause_name_lvl2",
+                   "year_id", "age_group_years_start", "race_cd", "sex_id", "toc",
+                   "has_hiv", "has_sud", "has_hepc", "has_cost", "unique_encounters", "tot_pay_amt", "has_cvd", "has__otherncd", "has_digest", 
+                      "has__mental", "has_msk", "has_skin", "has__sense", "has__well", 
+                      "has_nutrition", "has_diab_ckd", "has__neuro", "has__rf", "has_resp", 
+                      "has__ri", "has__neo", "has__infect", "has_inj_trans", "has__unintent", 
+                      "has__intent", "has__enteric_all", "has_std", "has__ntd", "has_mater_neonat", 
+                      "cause_count")
+
+setcolorder(df, intersect(desired_order, names(df)))
+
+##----------------------------------------------------------------
+## 7. Write to parquet file
 ##----------------------------------------------------------------
 
 # Define base output directory

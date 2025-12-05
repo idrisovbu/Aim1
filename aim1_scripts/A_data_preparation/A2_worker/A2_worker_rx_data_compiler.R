@@ -94,7 +94,7 @@ for (i in 1:nrow(data_dirs)) {
   start <- Sys.time()
   
   # Read in data
-  dt <- open_dataset(dir) %>%
+  df <- open_dataset(dir) %>%
     filter(ENHANCED_FIVE_PERCENT_FLAG == "Y") %>% # Filters on 5% random sample column
     filter(mc_ind == 0L) %>%
     filter(pri_payer == 1) %>%
@@ -103,11 +103,11 @@ for (i in 1:nrow(data_dirs)) {
     as.data.table()
   
   # rename once (no duplicates)
-  setnames(dt, old = c("claim_id", "tot_chg_amt"),
+  setnames(df, old = c("claim_id", "tot_chg_amt"),
            new = c("encounter_id", "tot_pay_amt"))
   
   # Add metadata from folder structure
-  dt[, `:=`(
+  df[, `:=`(
     sex_id = row$sex_id,
     year_id = row$year_id,
     age_group_years_start = row$age_group_years_start,
@@ -115,32 +115,37 @@ for (i in 1:nrow(data_dirs)) {
     code_system = "RX"
   )]
   
-  # Step 1: Save flags BEFORE filtering
-  hiv_benes <- unique(dt[acause == "hiv", .(bene_id)][, has_hiv := 1L])
+  ##----------------------------------------------------------------
+  ## 1. Assign condition flags *before* filtering
+  ##----------------------------------------------------------------
+  # Save beneficiary-level flags
+  hiv_benes <- unique(df[acause == "hiv", .(bene_id)][, has_hiv := 1L])
   sud_benes <- unique(
-    dt[acause %in% c("mental_alcohol", "mental_drug_agg", "mental_drug_opioids"), .(bene_id)][, has_sud := 1L])
-  hepc_benes <- unique(dt[acause == "hepatitis_c", .(bene_id)][, has_hepc := 1L])
+    df[acause %in% c("mental_alcohol", "mental_drug_agg", "mental_drug_opioids"), .(bene_id)][, has_sud := 1L])
+  hepc_benes <- unique(df[acause == "hepatitis_c", .(bene_id)][, has_hepc := 1L])
   
-  # Step 2: Filter to primary cause only
-  dt <- dt[primary_cause == 1]
+  # Join flags
+  df <- merge(df, hiv_benes, by = "bene_id", all.x = TRUE)
+  df <- merge(df, sud_benes, by = "bene_id", all.x = TRUE)
+  df <- merge(df, hepc_benes, by = "bene_id", all.x = TRUE)
   
-  # Step 3: Reattach flags
-  dt <- merge(dt, hiv_benes, by = "bene_id", all.x = TRUE)
-  dt <- merge(dt, sud_benes, by = "bene_id", all.x = TRUE)
-  dt <- merge(dt, hepc_benes, by = "bene_id", all.x = TRUE)
+  # Replace NAs with 0
+  df[is.na(has_hiv), has_hiv := 0L]
+  df[is.na(has_sud), has_sud := 0L]
+  df[is.na(has_hepc), has_hepc := 0L]
   
-  dt[is.na(has_hiv), has_hiv := 0L]
-  dt[is.na(has_sud), has_sud := 0L]
-  dt[is.na(has_hepc), has_hepc := 0L]
+  # Keep only Black, White, and Hispanic
+  df <- df[race_cd %in% c("BLCK", "WHT", "HISP")]
   
-  # Step 4: Restrict to BLCK, WHT, HISP
-  dt <- dt[race_cd %in% c("BLCK", "WHT", "HISP")]
+  ##----------------------------------------------------------------
+  ## 2. Acause maping per DEX categories
+  ##----------------------------------------------------------------
   
   # Define mapping columns (so we can drop them safely before join)
   mapping_cols <- c("acause_lvl2", "cause_name_lvl2", "acause_lvl1", "cause_name_lvl1")
   
-  # Convert your dt to tibble and clean 'acause'
-  dt <- as_tibble(dt) %>%
+  # Convert your df to tibble and clean 'acause'
+  df <- as_tibble(df) %>%
     mutate(acause = trimws(tolower(acause))) %>%
     select(-any_of(mapping_cols))  # Drop mapping cols if already present
   
@@ -156,48 +161,28 @@ for (i in 1:nrow(data_dirs)) {
     )
   
   # Join (mapping cols can only exist once now)
-  dt <- dt %>%
+  df <- df %>%
     left_join(df_map, by = "acause")
   
   # Defensive check for accidental duplicate columns (should never hit)
-  if(any(duplicated(names(dt)))) {
-    dupes <- names(dt)[duplicated(names(dt))]
+  if(any(duplicated(names(df)))) {
+    dupes <- names(df)[duplicated(names(df))]
     stop(paste("ERROR: Duplicated columns after join:", paste(dupes, collapse = ", ")))
   }
   
   # Quick check for mapping success
-  message("Mapping completed. Number of records: ", nrow(dt))
-  print(table(is.na(dt$acause_lvl2)))
-  
-  # Convert back to data.table
-  setDT(dt)
-  
-  # Collapse on encounter_id
-  dt <- dt[, .(
-    has_hiv            = max(has_hiv, na.rm=TRUE),
-    has_sud            = max(has_sud, na.rm=TRUE),
-    has_hepc           = max(has_hepc, na.rm=TRUE),
-    unique_encounters  = .N,
-    tot_pay_amt        = sum(tot_pay_amt, na.rm=TRUE),
-    has_cost           = as.integer(sum(tot_pay_amt, na.rm=TRUE) > 0)
-  ), by = .(bene_id, acause_lvl1, acause_lvl2, cause_name_lvl1, cause_name_lvl2,
-            year_id, age_group_years_start, toc, race_cd, sex_id)]
-  
-  
-  desired_order <- c("bene_id", "acause_lvl2", "acause_lvl1", "cause_name_lvl1", "cause_name_lvl2",
-                     "year_id", "age_group_years_start", "race_cd", "sex_id", "toc",
-                     "has_hiv", "has_sud", "has_hepc", "has_cost", "unique_encounters", "tot_pay_amt")
-  setcolorder(dt, intersect(desired_order, names(dt)))
+  message("Mapping completed. Number of records: ", nrow(df))
+  print(table(is.na(df$acause_lvl2)))
   
   ##----------------------------------------------------------------
-  ## 4. Add binary disease flag columns and unique disease count column per grouped bene
+  ## 3. Add binary disease flag columns and unique disease count column per grouped bene
   ##----------------------------------------------------------------
   cause_list <- c("_enteric_all","_infect","_intent","_mental","_neo","_neuro",
                   "_ntd","_otherncd","_rf","_ri","_sense","_subs","_unintent","_well","cvd","diab_ckd",
                   "digest","hiv","inj_trans","mater_neonat","msk","nutrition","resp", "skin", "std")
   
   # Create matrix of binary values for unique bene x has_<cause>
-  df_cause_flags <- dt %>%
+  df_cause_flags <- df %>%
     mutate(cause = acause_lvl2) %>%
     distinct(bene_id, cause) %>%              # one cause per patient
     mutate(flag = 1L, cause = paste0("has_", cause)) %>%
@@ -216,11 +201,47 @@ for (i in 1:nrow(data_dirs)) {
   df_cause_flags <- df_cause_flags %>%
     mutate(cause_count = rowSums(across(colnames(df_cause_flags)[-1])))
   
-  # Join data back with main df
-  dt <- dt %>% left_join(df_cause_flags, by = "bene_id")
+  ##----------------------------------------------------------------
+  ## 4. Filter to primary cause only
+  ##----------------------------------------------------------------
+  df <- df %>%
+    filter(primary_cause == 1)
+  
+  ##----------------------------------------------------------------
+  ## 5. Collapse to bene × disease category and attach metadata
+  ##----------------------------------------------------------------
+  # Convert back to data.table if needed
+  setDT(df)
+  
+  df <- df[, .(
+    has_hiv           = max(has_hiv, na.rm=TRUE),
+    has_sud           = max(has_sud, na.rm=TRUE),
+    has_hepc          = max(has_hepc, na.rm=TRUE),
+    unique_encounters = uniqueN(encounter_id),
+    tot_pay_amt       = sum(tot_pay_amt, na.rm=TRUE),
+    has_cost          = as.integer(sum(tot_pay_amt, na.rm=TRUE) > 0)
+  ), by = .(bene_id, acause_lvl1, acause_lvl2, cause_name_lvl1, cause_name_lvl2,
+            year_id, age_group_years_start, toc, race_cd, sex_id)]
+  
+  ##----------------------------------------------------------------
+  ## 6. Join with binary disease flag df for "has_" column information for each bene
+  ##----------------------------------------------------------------
+  df <- df %>% left_join(df_cause_flags, by = "bene_id")
+  
+  # Set column order - doesn't have "st_resi" for RX data
+  desired_order <- c("bene_id", "acause_lvl2", "acause_lvl1", "cause_name_lvl1", "cause_name_lvl2",
+                     "year_id", "age_group_years_start", "race_cd", "sex_id", "toc",
+                     "has_hiv", "has_sud", "has_hepc", "has_cost", "unique_encounters", "tot_pay_amt", "has_cvd", "has__otherncd", "has_digest", 
+                     "has__mental", "has_msk", "has_skin", "has__sense", "has__well", 
+                     "has_nutrition", "has_diab_ckd", "has__neuro", "has__rf", "has_resp", 
+                     "has__ri", "has__neo", "has__infect", "has_inj_trans", "has__unintent", 
+                     "has__intent", "has__enteric_all", "has_std", "has__ntd", "has_mater_neonat", 
+                     "cause_count")
+  
+  setcolorder(df, intersect(desired_order, names(df)))
 
   ##----------------------------------------------------------------
-  ## 5. Save as chunk
+  ## 7. Save as chunk
   ##----------------------------------------------------------------
   
   # Extract state abbreviation from directory path
@@ -237,11 +258,11 @@ for (i in 1:nrow(data_dirs)) {
   chunk_path <- file.path(rx_chunk_folder, chunk_filename)
   
   # Write output
-  write_parquet(dt, chunk_path, compression = "snappy", use_dictionary = TRUE)
+  write_parquet(df, chunk_path, compression = "snappy", use_dictionary = TRUE)
   
   message(sprintf("Completed %d of %d folders", i, nrow(data_dirs)))
   message("Done in: ", Sys.time() - start)
-  rm(dt); gc()
+  rm(df); gc()
 }
 
   

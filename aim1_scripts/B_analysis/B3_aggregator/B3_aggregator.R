@@ -49,16 +49,16 @@ ensure_dir_exists <- function(dir_path) {
 # Define input directory 
 base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis"
 
-date_summary_stats <- "bested"
+date_summary_stats <- "20250925"
 input_summary_stats <- file.path(base_dir, "01.Summary_Statistics", date_summary_stats)
 
-date_regression <- "20250922" #9/22 was experimental run with the "has_" variables included in the model
+date_regression <- "20250925" #9/22 was experimental run with the "has_" variables included in the model
 input_regression_estimates <- file.path(base_dir, "02.Regression_Estimates", date_regression)
 
-date_meta_stats <- "bested"
+date_meta_stats <- "20250925"
 input_meta_stats <- file.path(base_dir, "03.Meta_Statistics", date_meta_stats) 
 
-date_tpe <- "20250922"
+date_tpe <- "20251108"
 input_by_cause <- file.path(base_dir, "04.Two_Part_Estimates", date_tpe, "by_cause/results")
 
 # Define output directory
@@ -227,8 +227,6 @@ cols_needed <- c(
   "p_gamma",
   "interaction_dropped",
   "year_id",
-  "file_type",
-  "age_group_years_start",
   "bootstrap_number",
   "cause_name"
 )
@@ -273,19 +271,19 @@ sig_counts <- df_input_re %>%
   )
 write_csv(sig_counts, file.path(output_folder, "02.Regression_Estimates_subtable_sig_counts.csv"))
 
-# Coverage table by year and age group
-estimate_count <- df_input_re %>% count(year_id, age_group_years_start, name = "n_estimates")
-write_csv(estimate_count, file.path(output_folder, "02.Regression_Estimates_subtable_n_estimates_by_year_age.csv"))
-
-estimate_signif <- df_input_re %>%
-  group_by(year_id, age_group_years_start) %>%
-  summarise(
-    n_estimates = n(),
-    n_sig_gamma = sum(!is.na(p_gamma) & p_gamma < 0.05, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-write_csv(estimate_signif, file.path(output_folder, "02.Regression_Estimates_subtable_n_estimates_signif_by_year_age.csv"))
+# # Coverage table by year and age group (don't have age group anymore)
+# estimate_count <- df_input_re %>% count(year_id, age_group_years_start, name = "n_estimates")
+# write_csv(estimate_count, file.path(output_folder, "02.Regression_Estimates_subtable_n_estimates_by_year_age.csv"))
+# 
+# estimate_signif <- df_input_re %>%
+#   group_by(year_id, age_group_years_start) %>%
+#   summarise(
+#     n_estimates = n(),
+#     n_sig_gamma = sum(!is.na(p_gamma) & p_gamma < 0.05, na.rm = TRUE),
+#     .groups = "drop"
+#   )
+# 
+# write_csv(estimate_signif, file.path(output_folder, "02.Regression_Estimates_subtable_n_estimates_signif_by_year_age.csv"))
 
 
 # Add significance flags to data
@@ -305,15 +303,15 @@ by_cause <- df_input_re %>%
   )
 write_csv(by_cause, file.path(output_folder, "02.Regression_Estimates_subtable_sig_by_cause.csv"))
 
-#  By age group only
-by_age <- df_input_re %>%
-  group_by(age_group_years_start) %>%
-  summarise(
-    n_estimates = n(),
-    prop_sig_gamma = mean(sig_gamma, na.rm = TRUE),
-    .groups = "drop"
-  )
-write_csv(by_age, file.path(output_folder, "02.Regression_Estimates_subtable_sig_by_age_group.csv"))
+# #  By age group only (don't have age group anymore)
+# by_age <- df_input_re %>%
+#   group_by(age_group_years_start) %>%
+#   summarise(
+#     n_estimates = n(),
+#     prop_sig_gamma = mean(sig_gamma, na.rm = TRUE),
+#     .groups = "drop"
+#   )
+# write_csv(by_age, file.path(output_folder, "02.Regression_Estimates_subtable_sig_by_age_group.csv"))
 
 # By year only
 by_year <- df_input_re %>%
