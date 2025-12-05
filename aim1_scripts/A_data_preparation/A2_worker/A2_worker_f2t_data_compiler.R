@@ -79,8 +79,8 @@ for (i in 1:nrow(data_dirs)) {
   # read in dataset
   dt <- open_dataset(dir) %>%
     filter(ENHANCED_FIVE_PERCENT_FLAG == "Y") %>% # Filters on 5% random sample column
-    filter(pri_payer == 1) %>%
-    filter(mc_ind == 0) %>%
+    filter(pri_payer == 1) %>% # These are set to strings in later pipeline runs, 1 here means "mdcr"
+    filter(mc_ind == 0) %>% # mc_ind == 0 means a lot of costs have 0 of spending, driving costs down
     select(bene_id, encounter_id, acause, primary_cause, race_cd, sex_id, tot_pay_amt, st_resi) %>%
     collect() %>%
     as.data.frame()
