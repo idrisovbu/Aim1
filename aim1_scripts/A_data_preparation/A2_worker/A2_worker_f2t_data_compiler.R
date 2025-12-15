@@ -127,7 +127,7 @@ df[is.na(has_hepc), has_hepc := 0L]
 df <- df[race_cd %in% c("BLCK", "WHT", "HISP")]
 
 ##----------------------------------------------------------------
-## 2. Acause maping per DEX categories
+## 2. Acause mapping per DEX categories
 ##----------------------------------------------------------------
 
 # Define the mapping columns to avoid duplicates after the join
@@ -168,7 +168,7 @@ cause_list <- c("_enteric_all","_infect","_intent","_mental","_neo","_neuro",
 # Create matrix of binary values for unique bene x has_<cause>
 df_cause_flags <- df %>%
   mutate(cause = acause_lvl2) %>%
-  distinct(bene_id, cause) %>%              # one cause per patient
+  distinct(bene_id, cause) %>%              # each row of bene will have a unique cause associated with that bene_id
   mutate(flag = 1L, cause = paste0("has_", cause)) %>%
   pivot_wider(names_from = cause, values_from = flag, values_fill = 0)
 
@@ -193,6 +193,7 @@ df <- df %>%
 
 ##----------------------------------------------------------------
 ## 5. Collapse to bene × disease category and attach metadata
+## We collapse the "encounter_id", "code_system"* (only an issue if multiple code systems for same data)
 ##----------------------------------------------------------------
 # Convert back to data.table if needed
 setDT(df)

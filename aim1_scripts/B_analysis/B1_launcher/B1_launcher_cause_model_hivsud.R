@@ -78,21 +78,28 @@ bootstrap_iterations <- 5
 # "cause_count" is just the plain "tot_pay_amt ~ has_hiv * has_sud + race_cd + sex_id + age_group_years_start + cause_count" model
 model_type <- "has_all" 
 
+# Set counterfactual to be all 0's or preserve data as-is
+# This is related to the B2 model setting the counterfactuals during the prediction step to either
+# all 0's, or to leave the data as-is. Setting to all 0's "isolates" the cost of the cause, but drastically
+# reduces the overall cost. Leaving the has_ variables as-is makes the cost much higher than all 0's.
+# Options: T (all 0's for has_ variables), F (leaving data as-is)
+counterfactual_0 <- F
+
 # Submit jobs
 jid <- SUBMIT_ARRAY_JOB(
   name       = "B1_cause_model_hivsud",
   script     = script_path,
-  args       = c(fp_parameters, bootstrap_iterations, model_type),
+  args       = c(fp_parameters, bootstrap_iterations, model_type, counterfactual_0),
   error_dir  = log_dir,
   output_dir = log_dir,
   queue      = "all.q",
   n_jobs     = nrow(df_params),
   memory     = "150G",         # often enough per cause; adjust if needed
   threads    = 1,
-  time       = "01:00:00",    # adjust per dataset size/boots (~5 min for 5 bootstraps, old - 4 hrs needed for 1000 bootstraps)
+  time       = "00:30:00",    # adjust per dataset size/boots (~5 min for 5 bootstraps, old - 4 hrs needed for 1000 bootstraps)
   user_email = paste0(user, "@uw.edu"),
   archive    = FALSE,
-  test       = F
+  test       = T
 )
 
 cat("Submitted", nrow(df_params), "array tasks.\n")

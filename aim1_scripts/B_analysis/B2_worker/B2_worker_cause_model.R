@@ -81,11 +81,12 @@ if (interactive()) {
   fp_parameters_input <- "/ihme/limited_use//LU_CMS/DEX/hivsud/aim1/resources_aim1//B1_two_part_model_parameters_aim1_BY_CAUSE.csv"
   df_params <- read.csv(fp_parameters_input)
   
-  a <- 1
+  a <- 27
   year_id <- df_params$year_id[a]
   cause_name <- df_params$cause_name[a]
-  bootstrap_iterations <- 10
+  bootstrap_iterations <- 2
   model_type <- "has_all"
+  counterfactual_0 <- F
   
   # List out all F2T & RX filepaths by age group
   list_files <- unlist(as.list(df_params[a, 3:ncol(df_params)]))
@@ -104,6 +105,7 @@ if (interactive()) {
   cause_name  <- df_job$cause_name 
   bootstrap_iterations  <- as.integer(args[2])
   model_type <- args[3]
+  counterfactual_0 <- args[4]
   
   # List out all F2T & RX filepaths by age group
   list_files <- unlist(as.list(df_params[array_job_number, 3:ncol(df_params)]))
@@ -167,26 +169,29 @@ coerce_has_to_factor <- function(df) {
 
 # Helper: predict on bootstrap sample holding everything (incl. cause_count) as observed,
 # but forcing (has_hiv, has_sud) to a given scenario. 
-predict_scenario <- function(dat, hiv_level, sud_level, model, nm) {
+predict_scenario <- function(dat, hiv_level, sud_level, model, nm, set_0) {
   #' @dat Input datatable (df)
   #' @hiv_level Either 0 or 1 (str)
   #' @sud_level Either 0 or 1 (str)
   #' @model Model object
   #' @nm Name for prediction column (str)
+  #' @set_0 Whether or not to set has_* variables to all 0, or to preserve as-is (bool)
   tmp <- copy(dat)
   tmp[, has_hiv := factor(hiv_level, levels = levels(dat$has_hiv))]
   tmp[, has_sud := factor(sud_level, levels = levels(dat$has_sud))]
   
-  # Set all "has_" level 2 diseases to 0 to isolate just the input disease cost
-  has_cols_0 <- c("has_hepc", "has_cvd", "has__otherncd", "has_digest", "has__mental",
-    "has_msk", "has_skin", "has__sense", "has__well", "has_nutrition",
-    "has_diab_ckd", "has__neuro", "has__rf", "has_resp", "has__ri",
-    "has__neo", "has__infect", "has_inj_trans", "has__unintent",
-    "has__intent", "has__enteric_all", "has_std", "has__ntd", "has_mater_neonat")
-  for (col in has_cols_0) {
-    tmp[[col]] <- factor("0", levels = c("0", "1"))
+  if (set_0) {
+    # Set all "has_" level 2 diseases to 0 to isolate just the input disease cost
+    has_cols_0 <- c("has_hepc", "has_cvd", "has__otherncd", "has_digest", "has__mental",
+                    "has_msk", "has_skin", "has__sense", "has__well", "has_nutrition",
+                    "has_diab_ckd", "has__neuro", "has__rf", "has_resp", "has__ri",
+                    "has__neo", "has__infect", "has_inj_trans", "has__unintent",
+                    "has__intent", "has__enteric_all", "has_std", "has__ntd", "has_mater_neonat")
+    for (col in has_cols_0) {
+      tmp[[col]] <- factor("0", levels = c("0", "1"))
+    }
   }
-
+  
   tmp[, pred_cost := predict(model, newdata = tmp, type = "response")]
   out <- tmp[, .(val = mean(pred_cost, na.rm = TRUE)),
              by = .(race_cd, sex_id, age_group_years_start)]
@@ -202,13 +207,19 @@ base_output_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis"
 date_folder     <- format(Sys.time(), "%Y%m%d")
 output_folder   <- file.path(base_output_dir, "04.Two_Part_Estimates", date_folder)
 
+# counterfactual_0 string, modifies folder name depending if T or F
+counterfactual_string <- "has_1"
+if (counterfactual_0) {
+  counterfactual_string <- "has_0"
+}
+
 # parent branches under by_cause
-by_cause_root          <- file.path(output_folder, "by_cause")
+by_cause_root          <- file.path(output_folder, paste0("by_cause_", counterfactual_string))
 
 # boot_chunks is by cause, year, then age group (e.g. boot_chunks/_enteric_all/2015/65/chunk1.parquet)
 by_cause_boot_parent   <- file.path(by_cause_root, "boot_chunks")
 by_cause_results_parent<- file.path(by_cause_root, "results")
-by_cause_regression_coefficients <- file.path(base_output_dir, "02.Regression_Estimates", date_folder)
+by_cause_regression_coefficients <- file.path(base_output_dir, "02.Regression_Estimates", date_folder, paste0("estimates_", counterfactual_string))
 
 ensure_dir_exists(output_folder)
 ensure_dir_exists(by_cause_root)
@@ -330,6 +341,8 @@ df_row_count_metadata <- sex_weights %>%
   mutate(acause_lvl2 = as.character(cause_name)) %>%
   select(acause_lvl2, race_cd, age_group_years_start, total_row_count)
 
+# Run Winsorization at %
+df[, tot_pay_amt := pmin(tot_pay_amt, quantile(tot_pay_amt, 0.995, na.rm = TRUE))]
 
 # --- Create DF to store regression outputs ----------------------------------
 list_regression <- list()
@@ -400,7 +413,7 @@ for (b in seq_len(bootstrap_iterations)) {
   if (nrow(df_gamma_input) < 10) {
     cat("[", cause_name, "] Skip iter ", b, " - too few positive costs\n", sep = ""); next
   }
-  df_gamma_input[, tot_pay_amt := pmin(tot_pay_amt, quantile(tot_pay_amt, 0.995, na.rm = TRUE))]
+  
   mod_gamma <- try(glm(
     gamma_formula,
     data = df_gamma_input, family = Gamma(link = "log"),
@@ -411,10 +424,10 @@ for (b in seq_len(bootstrap_iterations)) {
   }
   
   # Counterfactual testing - Create four scenarios on the bootstrap sample and make model predictions × {HIV(0,1) × SUD(0,1)}
-  sc00 <- predict_scenario(df_gamma_input, "0", "0", mod_gamma, "cost_neither")
-  sc10 <- predict_scenario(df_gamma_input, "1", "0", mod_gamma, "cost_hiv_only")
-  sc01 <- predict_scenario(df_gamma_input, "0", "1", mod_gamma, "cost_sud_only")
-  sc11 <- predict_scenario(df_gamma_input, "1", "1", mod_gamma, "cost_hiv_sud")
+  sc00 <- predict_scenario(df_gamma_input, "0", "0", mod_gamma, "cost_neither", counterfactual_0)
+  sc10 <- predict_scenario(df_gamma_input, "1", "0", mod_gamma, "cost_hiv_only", counterfactual_0)
+  sc01 <- predict_scenario(df_gamma_input, "0", "1", mod_gamma, "cost_sud_only", counterfactual_0)
+  sc11 <- predict_scenario(df_gamma_input, "1", "1", mod_gamma, "cost_hiv_sud", counterfactual_0)
   
   # Merge sex_weights with our counterfactual scenario predictions
   df_sc <- merge(sex_weights, sc00)
