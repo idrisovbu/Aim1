@@ -49,25 +49,33 @@ ensure_dir_exists <- function(dir_path) {
 # Define input directory 
 base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis"
 
+# Whether the data has counterfactual all 0s, or the has_* variables have all 1's
+# Set T for has_0, F for has_1
+counterfactual_0 <- F
+
+counterfactual_string <- "has_1"
+if (counterfactual_0) {
+  counterfactual_string <- "has_0"
+}
+
 date_summary_stats <- "20250925"
 input_summary_stats <- file.path(base_dir, "01.Summary_Statistics", date_summary_stats)
 
-date_regression <- "20251212" #9/22 was experimental run with the "has_" variables included in the model, #12/12 is experimental and removes winsorization from the model
-input_regression_estimates <- file.path(base_dir, "02.Regression_Estimates", date_regression)
+date_regression <- "20251215" #9/22 was experimental run with the "has_" variables included in the model, #12/12 is experimental and removes winsorization from the model
+input_regression_estimates <- file.path(base_dir, "02.Regression_Estimates", date_regression, paste0("estimates_", counterfactual_string))
 
 date_meta_stats <- "20250925"
 input_meta_stats <- file.path(base_dir, "03.Meta_Statistics", date_meta_stats) 
 
-date_tpe <- "20251212" #12/12 is experimental and removes winsorization from model. #11/08 is most recent normal run w/ 5 bootstraps
-input_by_cause <- file.path(base_dir, "04.Two_Part_Estimates", date_tpe, "by_cause/results")
+date_tpe <- "20251215" #12/12 is experimental and removes winsorization from model. #11/08 is most recent normal run w/ 5 bootstraps
+input_by_cause <- file.path(base_dir, "04.Two_Part_Estimates", date_tpe, paste0("by_cause_", counterfactual_string), "results")
 
 # Define output directory
 date_of_output <- format(Sys.time(), "%Y%m%d")
-output_folder <- file.path(base_dir, "05.Aggregation_Summary", date_of_output)
+output_folder <- file.path(base_dir, "05.Aggregation_Summary", date_of_output, counterfactual_string)
 
 # Ensure directory exists
 ensure_dir_exists(output_folder)
-
 
 ##----------------------------------------------------------------
 ## 0.2 Helper function to Calculate weighted means for multiple columns within grouped strata.
@@ -206,6 +214,22 @@ write_csv(by_age_ss,        file.path(output_folder, "01.Summary_Statistics_subt
 write_csv(by_cause_year_ss, file.path(output_folder, "01.Summary_Statistics_subtable_by_cause_year.csv"))
 
 cat("All descriptive summary subtables have been saved to CSV in", output_folder, "\n")
+
+##----------------------------------------------------------------
+## 1.4 Create cause*toc*ranking table
+##----------------------------------------------------------------
+by_cause_toc_rank <- df_adj_ss %>% 
+  group_by(acause_lvl2, toc) %>%
+  summarize(
+    avg_cost_per_bene = weighted.mean(avg_cost_per_bene, n_benes_per_group),
+    .groups = "drop"
+  ) %>%
+  arrange(toc, desc(avg_cost_per_bene)) %>%
+  group_by(toc) %>%
+  mutate(rank = row_number()) %>%
+  ungroup()
+
+write_csv(by_cause_toc_rank, file.path(output_folder, "01.Summary_Statistics_subtable_by_cause_toc_rank.csv"))
 
 ##----------------------------------------------------------------
 ## 2. Aggregate & Summarize - 02.Regression_Estimates

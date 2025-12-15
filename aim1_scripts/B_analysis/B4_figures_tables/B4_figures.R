@@ -18,9 +18,19 @@ date_today <- format(Sys.time(), "%Y%m%d")
 # Detect IHME cluster by checking for /mnt/share/limited_use
 if (dir.exists("/mnt/share/limited_use")) {
   # IHME/cluster environment
-  date_of_input <- "20251212" #11/08 was most recent normal 5 bootstrap run
+  date_of_input <- "20251215" #11/08 was most recent normal 5 bootstrap run
+  
+  # Whether the data has counterfactual all 0s, or the has_* variables have all 1's
+  # Set T for has_0, F for has_1
+  counterfactual_0 <- T
+  
+  counterfactual_string <- "has_1"
+  if (counterfactual_0) {
+    counterfactual_string <- "has_0"
+  }
+  
   base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis/"
-  input_dir <- file.path(base_dir, "05.Aggregation_Summary", date_of_input)
+  input_dir <- file.path(base_dir, "05.Aggregation_Summary", date_of_input, counterfactual_string)
   figures_dir <- file.path(base_dir, "06.Figures")
   # (add your other cluster-specific library loads here)
 } else {
@@ -31,7 +41,7 @@ if (dir.exists("/mnt/share/limited_use")) {
 }
 
 # Create output directory for today's date
-output_dir <- file.path(figures_dir, date_today)
+output_dir <- file.path(figures_dir, date_today, counterfactual_string)
 if (!dir.exists(figures_dir)) dir.create(figures_dir, recursive = TRUE)
 if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
 
