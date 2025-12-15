@@ -72,12 +72,6 @@ dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
 # Set bootstrap iterations
 bootstrap_iterations <- 5
 
-# Set model type
-# "has_all"  uses all "has_*" cause name binary values as part of the model (does not use cause_count)
-# "topk" uses top 16 most common causes, decided by total row count, + cause_count_minus_top_k as part of the model
-# "cause_count" is just the plain "tot_pay_amt ~ has_hiv * has_sud + race_cd + sex_id + age_group_years_start + cause_count" model
-model_type <- "has_all" 
-
 # Set counterfactual to be all 0's or preserve data as-is
 # This is related to the B2 model setting the counterfactuals during the prediction step to either
 # all 0's, or to leave the data as-is. Setting to all 0's "isolates" the cost of the cause, but drastically
@@ -89,7 +83,7 @@ counterfactual_0 <- F
 jid <- SUBMIT_ARRAY_JOB(
   name       = "B1_cause_model_hivsud",
   script     = script_path,
-  args       = c(fp_parameters, bootstrap_iterations, model_type, counterfactual_0),
+  args       = c(fp_parameters, bootstrap_iterations, counterfactual_0),
   error_dir  = log_dir,
   output_dir = log_dir,
   queue      = "all.q",

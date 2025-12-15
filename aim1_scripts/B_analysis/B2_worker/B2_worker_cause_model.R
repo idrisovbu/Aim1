@@ -85,7 +85,6 @@ if (interactive()) {
   year_id <- df_params$year_id[a]
   cause_name <- df_params$cause_name[a]
   bootstrap_iterations <- 2
-  model_type <- "has_all"
   counterfactual_0 <- F
   
   # List out all F2T & RX filepaths by age group
@@ -104,8 +103,7 @@ if (interactive()) {
   year_id     <- df_job$year_id
   cause_name  <- df_job$cause_name 
   bootstrap_iterations  <- as.integer(args[2])
-  model_type <- args[3]
-  counterfactual_0 <- args[4]
+  counterfactual_0 <- args[3]
   
   # List out all F2T & RX filepaths by age group
   list_files <- unlist(as.list(df_params[array_job_number, 3:ncol(df_params)]))
@@ -372,30 +370,15 @@ for (b in seq_len(bootstrap_iterations)) {
     next
   }
   
-  # Model Type
-  if (model_type == "has_all") {
-    has_vars <- grep("^has_", names(df_boot), value = TRUE)
-    has_vars <- has_vars[4:length(has_vars)] # removes has_hiv, has_sud, has_cost
-    has_vars <- has_vars[!grepl(paste0("has_*", cause_name), has_vars)] # removes current cause_name
-    
-    rhs_gamma_formula <- paste(
-      c("has_hiv * has_sud", "race_cd", "sex_id", "age_group_years_start", has_vars),
-      collapse = " + "
-    )
-
-  } else if (model_type == "topk") {
-    top_k_cause_list <- c(
-      "has__rf","has_cvd","has__otherncd","has_diab_ckd","has_msk","has__neo","has_digest","has_resp",
-      "has_skin","has__ri","has__sense","has__well","has__neuro","has__mental","has__unintent"
-    )
-    filtered_top_k_cause_list <- top_k_cause_list[!grepl(paste0("has_*", cause_name), top_k_cause_list)] # removes current cause_name
-    rhs_gamma_formula <- paste(
-      c("has_hiv * has_sud", "race_cd", "sex_id + age_group_years_start + cause_count_minus_top_k", filtered_top_k_cause_list),
-      collapse = " + "
-    )
-  } else if (model_type == "cause_count") {
-    rhs_gamma_formula <- c("has_hiv * has_sud + race_cd + sex_id + age_group_years_start + cause_count")
-  }
+  # Model
+  has_vars <- grep("^has_", names(df_boot), value = TRUE)
+  has_vars <- has_vars[4:length(has_vars)] # removes has_hiv, has_sud, has_cost
+  has_vars <- has_vars[!grepl(paste0("has_*", cause_name), has_vars)] # removes current cause_name
+  
+  rhs_gamma_formula <- paste(
+    c("has_hiv * has_sud", "race_cd", "sex_id", "age_group_years_start", has_vars),
+    collapse = " + "
+  )
   
   gamma_formula <- as.formula(paste(
     "tot_pay_amt ~ ", rhs_gamma_formula
@@ -403,12 +386,6 @@ for (b in seq_len(bootstrap_iterations)) {
 
   # Gamma Model - Gamma on positive costs (truncate 99.5%)
   df_gamma_input <- df_boot[tot_pay_amt > 0]
-  
-  if (model_type == "topk") { # Creates cause_count_minus_top_k just for this model type
-    df_gamma_input[, cause_count_minus_top_k :=
-                     cause_count - rowSums(as.data.frame(lapply(.SD, function(x) as.numeric(as.character(x))))),
-                   .SDcols = filtered_top_k_cause_list] # This creates the cause_count_minus_top_k amount
-  }
 
   if (nrow(df_gamma_input) < 10) {
     cat("[", cause_name, "] Skip iter ", b, " - too few positive costs\n", sep = ""); next
