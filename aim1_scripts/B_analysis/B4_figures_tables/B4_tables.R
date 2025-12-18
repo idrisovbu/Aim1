@@ -19,7 +19,7 @@ date_today <- format(Sys.time(), "%Y%m%d")
 # Detect IHME cluster by checking for /mnt/share/limited_use
 if (dir.exists("/mnt/share/limited_use")) {
   # IHME/cluster environment
-  date_of_input <- "20251215" #11/08 was most recent normal 5 bootstrap run
+  date_of_input <- "20251217" #11/08 was most recent normal 5 bootstrap run
   
   # Whether the data has counterfactual all 0s, or the has_* variables have all 1's
   # Set T for has_0, F for has_1
@@ -1348,7 +1348,7 @@ fwrite(df_ss_t4, file.path(output_tables_dir, "SS_T4.csv"))
 # Rows: 25 diseases (including HIV and SUD)
 # Columns:
 ##----------------------------------------------------------------
-df_ss_t5 <- data_list$`01.Summary_Statistics_subtable_by_cause_toc_rank`
+df_ss_t5 <- data_list$`01.Summary_Statistics_subtable_by_cause_toc_rank_per_bene`
 
 # Merge with df_map for proper cause names
 df_ss_t5 <- left_join(
@@ -1373,6 +1373,40 @@ df_ss_t5[["Average Cost per Beneficiary (USD)"]] <- dollar(df_ss_t5[["Average Co
 
 # Save and output able as .csv
 fwrite(df_ss_t5, file.path(output_tables_dir, "SS_T5.csv"))
+
+##----------------------------------------------------------------
+## 2.15 SS_T6
+#   Summary stats data
+#   all causes, by toc, by year, average cost per encounter, ranked
+# Rows: 25 diseases (including HIV and SUD)
+# Columns:
+##----------------------------------------------------------------
+df_ss_t6 <- data_list$`01.Summary_Statistics_subtable_by_cause_toc_year_id_rank_per_encounter`
+
+# Merge with df_map for proper cause names
+df_ss_t6 <- left_join(
+  x = df_ss_t6,
+  y = df_map %>% select(c("acause_lvl2", "cause_name_lvl2")),
+  by = "acause_lvl2"
+)
+
+# Arrange columns in final desired order + drop unnecessary columns
+df_ss_t6_col_order <- c("cause_name_lvl2", "toc", "year_id", "rank", "avg_cost_per_encounter")
+
+df_ss_t6 <- df_ss_t6 %>% select(all_of(df_ss_t6_col_order))
+
+df_ss_t6 <- df_ss_t6 %>% 
+  setnames(old = "cause_name_lvl2", new = "Level 2 Cause") %>%      
+  setnames(old = "toc", new = "Type of Care") %>%      
+  setnames(old = "year_id", new = "Year") %>%      
+  setnames(old = "rank", new = "Rank") %>%      
+  setnames(old = "avg_cost_per_encounter", new = "Average Cost per Encounter (USD)")
+
+# Convert to dollars
+df_ss_t6[["Average Cost per Encounter (USD)"]] <- dollar(df_ss_t6[["Average Cost per Encounter (USD)"]])
+
+# Save and output able as .csv
+fwrite(df_ss_t6, file.path(output_tables_dir, "SS_T6.csv"))
 
 ##----------------------------------------------------------------
 ## Exploring Data (safe to delete)

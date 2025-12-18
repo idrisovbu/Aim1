@@ -30,81 +30,67 @@ if (Sys.info()["sysname"] == 'Linux'){
 }
 
 ##----------------------------------------------------------------
-## 0.1 Create directory folders 
+## 1. TPE File Checker for completeness
 ##----------------------------------------------------------------
-# Ensure the output directory exists
-ensure_dir_exists <- function(dir_path) {
-  if (!dir.exists(dir_path)) {
-    dir.create(dir_path, recursive = TRUE)
+base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis"
+
+# Create full df parameters
+fp_parameters_cause <- "/ihme/limited_use//LU_CMS/DEX/hivsud/aim1/resources_aim1//B1_two_part_model_parameters_aim1_BY_CAUSE.csv"
+fp_parameters_cause_hivsud <- "/ihme/limited_use//LU_CMS/DEX/hivsud/aim1/resources_aim1//B1_two_part_model_parameters_aim1_BY_CAUSE_HIVSUD.csv"
+
+df_parameters_cause <- fread(fp_parameters_cause)
+df_parameters_cause_hivsud <- fread(fp_parameters_cause_hivsud)
+
+df_parameters <- rbind(df_parameters_cause, df_parameters_cause_hivsud)
+
+# 04. Two Part Model Checking
+date_tpe <- "20251216"
+input_cause_has_0 <- file.path(base_dir, "04.Two_Part_Estimates", date_tpe, "by_cause_has_0", "results")
+input_cause_has_1 <- file.path(base_dir, "04.Two_Part_Estimates", date_tpe, "by_cause_has_1", "results")
+
+# Extract cause_name and year_id from string, convert list to df
+make_df_from_files <- function(x) {
+  if (is.list(x)) {
+    files <- unlist(x, use.names = FALSE)
+  } else if (is.character(x)) {
+    files <- x
+  } else {
+    stop("x must be a character vector or a list of character strings")
+  }
+  
+  data.frame(
+    file = files,
+    cause_name = sub("/.*$", "", files),
+    year_id = as.integer(sub(".*_year([0-9]{4})\\.csv$", "\\1", files)),
+    stringsAsFactors = FALSE
+  )
+}
+
+compare_to_df_param <- function(x, y) {
+  z <- left_join(y %>% select(c("cause_name", "year_id")),
+                 x,
+                 by = c("cause_name", "year_id"))
+  
+  z <- z %>% filter(is.na(file))
+  
+  if(nrow(z) != 0) {
+    print(paste0("Missing these cause/years"))
+    for (i in 1:nrow(z)) {
+      print(paste0("Cause_name: ", z[i, "cause_name"], " Year_id: ", z[i, "year_id"]))
+    }
+  } else {
+    print("No missing files")
   }
 }
 
-# Define input directory 
-base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis"
+# has_0
+list_tpe_has_0 <- list.files(input_cause_has_0, recursive = TRUE, include.dirs = FALSE)
+df_tpe_has_0 <- make_df_from_files(list_tpe_has_0)
+compare_to_df_param(df_tpe_has_0, df_parameters)
 
-date_summary_stats <- "20250925"
-input_summary_stats <- file.path(base_dir, "01.Summary_Statistics", date_summary_stats)
-
-date_regression <- "20250925" #9/22 was experimental run with the "has_" variables included in the model
-input_regression_estimates <- file.path(base_dir, "02.Regression_Estimates", date_regression)
-
-date_meta_stats <- "20250925"
-input_meta_stats <- file.path(base_dir, "03.Meta_Statistics", date_meta_stats) 
-
-date_tpe <- "20250925"
-input_by_cause <- file.path(base_dir, "04.Two_Part_Estimates", date_tpe, "by_cause/results")
-
-# Define output directory
-date_of_output <- format(Sys.time(), "%Y%m%d")
-output_folder <- file.path(base_dir, "05.Aggregation_Summary", date_of_output)
-
-# Ensure directory exists
-ensure_dir_exists(output_folder)
+# has_1
+list_tpe_has_1 <- list.files(input_cause_has_1, recursive = TRUE, include.dirs = FALSE)
+df_tpe_has_1 <- make_df_from_files(list_tpe_has_1)
+compare_to_df_param(df_tpe_has_1, df_parameters)
 
 
-##----------------------------------------------------------------
-## 0.2 Helper function to Calculate weighted means for multiple columns within grouped strata.
-##----------------------------------------------------------------
-#' @param df         Input dataframe.
-#' @param group_cols Character vector of columns to group by (strata).
-#' @param value_cols Character vector of columns for which to calculate weighted means.
-#' @param weight_col Character; name of the column to use as weights.
-#'
-#' @return A tibble/data.frame summarizing each group with weighted means for value columns
-#'         and the sum of the weights (total_bin_count).
-#'
-#' @examples
-#' result <- weighted_mean_all(
-#'   df = mydata,
-#'   group_cols = c("sex", "age_group", "year"),
-#'   value_cols = c("cost", "utilization"),
-#'   weight_col = "n_patients"
-#' )
-weighted_mean_all <- function(df, group_cols, value_cols, weight_col) {
-  df %>%
-    group_by(across(all_of(group_cols))) %>%
-    summarise(
-      across(
-        all_of(value_cols),
-        ~ weighted.mean(.x, .data[[weight_col]], na.rm = TRUE),
-        .names = "{.col}"
-      ),
-      total_bin_count = sum(.data[[weight_col]], na.rm = TRUE),
-      .groups = "drop"
-    )
-}
-
-
-##----------------------------------------------------------------
-## 1. Aggregate & Summarize - 01.Summary_Statistics
-##----------------------------------------------------------------
-
-##----------------------------------------------------------------
-## 1.1 Read in Data
-##----------------------------------------------------------------
-
-# Get the list of all CSV files from the input directory
-files_list_ss <- list.files(input_summary_stats, pattern = "\\.csv$", full.names = TRUE) 
-
-# Read files
-df_input_ss <- map_dfr(files_list_ss, ~read_csv(.x, show_col_types = FALSE))

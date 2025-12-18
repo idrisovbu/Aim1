@@ -70,7 +70,7 @@ log_dir  <- file.path(l, "LU_CMS/DEX/hivsud/aim1/B_analysis/logs", log_date)
 dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
 
 # Set bootstrap iterations
-bootstrap_iterations <- 3
+bootstrap_iterations <- 1000
 
 # Set counterfactual to be all 0's or preserve data as-is
 # This is related to the B2 model setting the counterfactuals during the prediction step to either
@@ -90,7 +90,7 @@ jid <- SUBMIT_ARRAY_JOB(
   n_jobs     = nrow(df_params),
   memory     = "150G",         # often enough per cause; adjust if needed
   threads    = 1,
-  time       = "00:30:00",    # adjust per dataset size/boots (~5 min for 5 bootstraps, old - 4 hrs needed for 1000 bootstraps)
+  time       = "24:00:00",    # adjust per dataset size/boots (~5 min for 5 bootstraps, 24 hours for 1000 bootstrap)
   user_email = paste0(user, "@uw.edu"),
   archive    = FALSE,
   test       = F

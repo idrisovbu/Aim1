@@ -61,13 +61,13 @@ if (counterfactual_0) {
 date_summary_stats <- "20250925"
 input_summary_stats <- file.path(base_dir, "01.Summary_Statistics", date_summary_stats)
 
-date_regression <- "20251215" #9/22 was experimental run with the "has_" variables included in the model, #12/12 is experimental and removes winsorization from the model
+date_regression <- "20251216" #9/22 was experimental run with the "has_" variables included in the model, #12/12 is experimental and removes winsorization from the model
 input_regression_estimates <- file.path(base_dir, "02.Regression_Estimates", date_regression, paste0("estimates_", counterfactual_string))
 
 date_meta_stats <- "20250925"
 input_meta_stats <- file.path(base_dir, "03.Meta_Statistics", date_meta_stats) 
 
-date_tpe <- "20251215" #12/12 is experimental and removes winsorization from model. #11/08 is most recent normal run w/ 5 bootstraps
+date_tpe <- "20251216" #12/12 is experimental and removes winsorization from model. #11/08 is most recent normal run w/ 5 bootstraps
 input_by_cause <- file.path(base_dir, "04.Two_Part_Estimates", date_tpe, paste0("by_cause_", counterfactual_string), "results")
 
 # Define output directory
@@ -216,9 +216,10 @@ write_csv(by_cause_year_ss, file.path(output_folder, "01.Summary_Statistics_subt
 cat("All descriptive summary subtables have been saved to CSV in", output_folder, "\n")
 
 ##----------------------------------------------------------------
-## 1.4 Create cause*toc*ranking table
+## 1.4 Create cause*toc*ranking per_bene table & cause*toc*ranking - per_encounter
 ##----------------------------------------------------------------
-by_cause_toc_rank <- df_adj_ss %>% 
+# per_bene
+by_cause_toc_rank_per_bene <- df_adj_ss %>% 
   group_by(acause_lvl2, toc) %>%
   summarize(
     avg_cost_per_bene = weighted.mean(avg_cost_per_bene, n_benes_per_group),
@@ -229,7 +230,21 @@ by_cause_toc_rank <- df_adj_ss %>%
   mutate(rank = row_number()) %>%
   ungroup()
 
-write_csv(by_cause_toc_rank, file.path(output_folder, "01.Summary_Statistics_subtable_by_cause_toc_rank.csv"))
+write_csv(by_cause_toc_rank_per_bene, file.path(output_folder, "01.Summary_Statistics_subtable_by_cause_toc_rank_per_bene.csv"))
+
+# per_encounter
+by_cause_toc_year_id_rank_per_encounter <- df_adj_ss %>% 
+  group_by(acause_lvl2, year_id, toc) %>%
+  summarize(
+    avg_cost_per_encounter = weighted.mean(avg_cost_per_encounter, n_benes_per_group),
+    .groups = "drop"
+  ) %>%
+  arrange(year_id, toc, desc(avg_cost_per_encounter)) %>%
+  group_by(year_id, toc) %>%
+  mutate(rank = row_number()) %>%
+  ungroup()
+
+write_csv(by_cause_toc_year_id_rank_per_encounter, file.path(output_folder, "01.Summary_Statistics_subtable_by_cause_toc_year_id_rank_per_encounter.csv"))
 
 ##----------------------------------------------------------------
 ## 2. Aggregate & Summarize - 02.Regression_Estimates
