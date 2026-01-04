@@ -51,20 +51,20 @@ base_dir <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/B_analysis"
 
 # Whether the data has counterfactual all 0s, or the has_* variables have all 1's
 # Set T for has_0, F for has_1
-counterfactual_0 <- F
+counterfactual_0 <- T
 
 counterfactual_string <- "has_1"
 if (counterfactual_0) {
   counterfactual_string <- "has_0"
 }
 
-date_summary_stats <- "20250925"
+date_summary_stats <- "20260103"
 input_summary_stats <- file.path(base_dir, "01.Summary_Statistics", date_summary_stats)
 
 date_regression <- "20251216" #9/22 was experimental run with the "has_" variables included in the model, #12/12 is experimental and removes winsorization from the model
 input_regression_estimates <- file.path(base_dir, "02.Regression_Estimates", date_regression, paste0("estimates_", counterfactual_string))
 
-date_meta_stats <- "20250925"
+date_meta_stats <- "20260103"
 input_meta_stats <- file.path(base_dir, "03.Meta_Statistics", date_meta_stats) 
 
 date_tpe <- "20251216" #12/12 is experimental and removes winsorization from model. #11/08 is most recent normal run w/ 5 bootstraps
@@ -133,7 +133,8 @@ df_input_ss <- map_dfr(files_list_ss, ~read_csv(.x, show_col_types = FALSE))
 # Source of CPI https://www.bls.gov/cpi/tables/supplemental-files/historical-cpi-u-202404.pdf
 
 # Adjust cost variables
-cost_columns <- c("avg_cost_per_bene", "avg_cost_per_bene_winsorized","max_cost_per_bene", "quantile_99_cost_per_bene","sum_cost_per_group")
+cost_columns <- c("avg_cost_per_bene", "avg_cost_per_bene_winsorized", "max_cost_per_bene", "max_cost_per_bene_winsorized",
+                  "quantile_99_cost_per_bene","sum_cost_per_group")
 
 df_adj_ss <- deflate(
   data = df_input_ss,
@@ -150,6 +151,7 @@ summary_table <- df_adj_ss %>%
     avg_cost_per_encounter = weighted.mean(avg_cost_per_encounter, n_benes_per_group, na.rm = TRUE),
     avg_cost_per_bene_winsorized = weighted.mean(avg_cost_per_bene_winsorized, n_benes_per_group, na.rm = TRUE),
     max_cost_per_bene = max(max_cost_per_bene, na.rm = TRUE),
+    max_cost_per_bene_winsorized = max(max_cost_per_bene_winsorized, na.rm = TRUE),
     quantile_99_cost_per_bene = weighted.mean(quantile_99_cost_per_bene, n_benes_per_group, na.rm = TRUE),
     sum_cost_per_group = sum(sum_cost_per_group, na.rm = TRUE),
     avg_encounters_per_bene = weighted.mean(avg_encounters_per_bene, n_benes_per_group, na.rm = TRUE),
@@ -169,7 +171,8 @@ cat("inflation-adjusted summary table saved to:", file.path(output_folder, "01.S
 
 # Only numeric columns!
 value_cols <- c(
-  "has_hiv", "has_sud", "has_hepc", "avg_cost_per_bene", "avg_cost_per_bene_winsorized","max_cost_per_bene",
+  "has_hiv", "has_sud", "has_hepc", "avg_cost_per_bene", "avg_cost_per_bene_winsorized",
+  "max_cost_per_bene", "max_cost_per_bene_winsorized",
   "quantile_99_cost_per_bene", "sum_cost_per_group", "n_benes_per_group",
   "avg_encounters_per_bene", "sum_encounters_per_group"
 )

@@ -127,7 +127,7 @@ meta_stats_2019 <- df_input[, .(
   hiv_and_hepc_unique_bene = uniqueN(bene_id[has_hiv == 1 & has_hepc == 1]),    
   sud_and_hepc_unique_bene = uniqueN(bene_id[has_sud == 1 & has_hepc == 1]),    
   hiv_sud_hepc_unique_bene = uniqueN(bene_id[has_hiv == 1 & has_sud == 1 & has_hepc == 1]) 
-), by = .(toc, age_group_years_start)]
+), by = .(race_cd, toc, age_group_years_start)]
 
 
 
@@ -164,6 +164,7 @@ acause_cost_dt <- df_input[, .(
     mean(pmin(tot_pay_amt, cutoff), na.rm = TRUE)
   },
   max_cost_per_bene = max(tot_pay_amt, na.rm = TRUE),
+  max_cost_per_bene_winsorized = quantile(tot_pay_amt, 0.995, na.rm = TRUE),
   quantile_99_cost_per_bene = quantile(tot_pay_amt, probs = 0.99, na.rm = TRUE),
   sum_cost_per_group = sum(tot_pay_amt, na.rm = TRUE)
 ), by = .(acause_lvl2, has_hiv, has_sud, has_hepc, race_cd, toc, age_group_years_start)]
@@ -183,7 +184,8 @@ summary_dt[, `:=`(year_id = year_id, file_type = file_type)]
 # Set column order
 setcolorder(summary_dt, c(
   "acause_lvl2", "has_hiv", "has_sud", "has_hepc", "race_cd", "toc", "age_group_years_start",
-  "avg_cost_per_bene", "avg_cost_per_encounter","avg_cost_per_bene_winsorized","max_cost_per_bene", "quantile_99_cost_per_bene", "sum_cost_per_group",
+  "avg_cost_per_bene", "avg_cost_per_encounter","avg_cost_per_bene_winsorized","max_cost_per_bene", "max_cost_per_bene_winsorized",
+  "quantile_99_cost_per_bene", "sum_cost_per_group",
   "n_benes_per_group", "avg_encounters_per_bene", "sum_encounters_per_group", "avg_cause_count_per_bene",
   "year_id", "file_type"
 ))

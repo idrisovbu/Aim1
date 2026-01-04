@@ -19,7 +19,7 @@ date_today <- format(Sys.time(), "%Y%m%d")
 # Detect IHME cluster by checking for /mnt/share/limited_use
 if (dir.exists("/mnt/share/limited_use")) {
   # IHME/cluster environment
-  date_of_input <- "20251217" #11/08 was most recent normal 5 bootstrap run
+  date_of_input <- "20260103" #11/08 was most recent normal 5 bootstrap run
   
   # Whether the data has counterfactual all 0s, or the has_* variables have all 1's
   # Set T for has_0, F for has_1
@@ -463,7 +463,8 @@ df_ss_t3 <- df_ss_t3 %>%
   group_by(acause_lvl2,cause_name_lvl2, has_hiv, has_sud, has_hepc, race_cd) %>%
   summarise(
     avg_cost_per_bene = weighted.mean(avg_cost_per_bene, w = total_unique_bene),
-    beneficiary_count = sum(total_unique_bene)
+    beneficiary_count = sum(total_unique_bene),
+    avg_encounters_per_bene = weighted.mean(avg_encounters_per_bene, total_unique_bene)
   )
 
 # Add labels for scenarios 
@@ -487,10 +488,10 @@ df_ss_t3 <- df_ss_t3 %>%
 df_ss_t3 <- df_ss_t3 %>%
   ungroup() %>%
   filter(condition %in% c("None", "HIV", "SUD", "HIV + SUD")) %>%
-  select(acause_lvl2, cause_name_lvl2, race_condition, avg_cost_per_bene, beneficiary_count) %>%
+  select(acause_lvl2, cause_name_lvl2, race_condition, avg_cost_per_bene, beneficiary_count, avg_encounters_per_bene) %>%
   pivot_wider(
     names_from = race_condition,
-    values_from = c(avg_cost_per_bene, beneficiary_count)
+    values_from = c(avg_cost_per_bene, beneficiary_count, avg_encounters_per_bene)
   )
 
 # Covert avg_cost_per_bene columns to dollar amounts
@@ -499,6 +500,9 @@ for (col in colnames(df_ss_t3)) {
     next
   } 
   else if (str_detect(col, "beneficiary_count") == TRUE) { 
+    next
+  }
+  else if (str_detect(col, "avg_encounters_per_bene") == TRUE) { 
     next
   }
   else {
@@ -521,14 +525,17 @@ for (race in race_order) {
   for (grp in group_order) {
     avg_col <- paste0("avg_cost_per_bene_", race, " - ", grp)
     count_col <- paste0("beneficiary_count_", race, " - ", grp)
+    avg_bene_col <- paste0("avg_encounters_per_bene_", race, " - ", grp)
     
     # Check if both columns exist
-    if (all(c(avg_col, count_col) %in% colnames(df_ss_t3))) {
+    if (all(c(avg_col, count_col, avg_bene_col) %in% colnames(df_ss_t3))) {
       # Format dollar values and combine with count
       if (ss_t3_keep_bin_counts) {
         ss_t3_new_cols[[paste0(race, " - ", grp)]] <- paste0(df_ss_t3[[avg_col]], " (n = ", df_ss_t3[[count_col]], ")")
+        ss_t3_new_cols[[paste0(race, " - ", grp, " Avg Encounters per Bene")]] <- df_ss_t3[[avg_bene_col]]
       } else {
         ss_t3_new_cols[[paste0(race, " - ", grp)]] <- paste0(df_ss_t3[[avg_col]])
+        ss_t3_new_cols[[paste0(race, " - ", grp, " Avg Encounters per Bene")]] <- df_ss_t3[[avg_bene_col]]
       }
       
     }
@@ -545,10 +552,6 @@ df_ss_t3 <- rename(df_ss_t3, "Level 2 Cause" = "cause_name_lvl2")
 
 # Save and output able as .csv
 fwrite(df_ss_t3, file.path(output_tables_dir, "SS_T3.csv"))
-
-
-
-
 
 ##----------------------------------------------------------------
 ## TPE_T1 — Average spending by cause (all ages, races, years combined)
@@ -1407,6 +1410,122 @@ df_ss_t6[["Average Cost per Encounter (USD)"]] <- dollar(df_ss_t6[["Average Cost
 
 # Save and output able as .csv
 fwrite(df_ss_t6, file.path(output_tables_dir, "SS_T6.csv"))
+
+##----------------------------------------------------------------
+## 2.16 SS_T7
+#   Summary stats data
+#   By cause, Max cost per bene vs. Max cost per bene winsorized
+#   Median (Before), Median (After), Mean (Before), Mean (After), Max (Before), Max (After)
+# Rows: 25 diseases (including HIV and SUD)
+##----------------------------------------------------------------
+df_ss_t7 <- data_list$`01.Summary_Statistics_inflation_adjusted_aggregated`
+
+# Merge with df_map for proper cause names
+df_ss_t7 <- left_join(
+  x = df_ss_t7,
+  y = df_map %>% select(c("acause_lvl2", "cause_name_lvl2")),
+  by = "acause_lvl2"
+)
+
+# Group by and create our final summary stats
+df_ss_t7 <- df_ss_t7 %>%
+  group_by(cause_name_lvl2) %>%
+  summarize(
+    "Median Max Cost per Bene" = median(max_cost_per_bene),
+    "Median Max Cost per Bene (Winsorization)" = median(max_cost_per_bene_winsorized),
+    "Mean Max Cost per Bene" = mean(max_cost_per_bene),
+    "Mean Max Cost per Bene(Winsorization)" = mean(max_cost_per_bene_winsorized),
+    "Max Max Cost per Bene" = max(max_cost_per_bene),
+    "Max Max Cost per Bene (Winsorization)" = max(max_cost_per_bene_winsorized)
+  )
+
+# Covert to dollar amounts
+for (col in colnames(df_ss_t7)) {
+  if (col == "cause_name_lvl2") {
+    next
+  }
+  df_ss_t7[[col]] <- dollar(df_ss_t7[[col]])
+}
+
+# Rename column
+df_ss_t7 <- df_ss_t7 %>% 
+  setnames(old = "cause_name_lvl2", new = "Level 2 Cause")
+
+# Save and output able as .csv
+fwrite(df_ss_t7, file.path(output_tables_dir, "SS_T7.csv"))
+
+##----------------------------------------------------------------
+## 2.17 MS_T2 - HIV, SUD, Hepc prevalence total, by year, toc age (percentages)
+##
+## Rows: Year*race
+## Columns: Total Unique Bene, Total Unique HIV Bene (count / %), Total Unique SUD Bene (count / %)
+##
+## This table uses the meta statistics outputs to sum the total beneficiaries by scenario (hiv, sud, hepc, and the combos)
+## and calculate percentages for how many unique beneficiaries there are out of the group total, summarized by year_id
+##
+## TODO: Make bins not all mutually exclusive (e.g. HIV column CAN have counts for people with HIV/SUD and other combos, etc.)
+##----------------------------------------------------------------
+
+# Set df
+df_ms_t2 <- data_list$`03.Meta_Statistics_aggregated`
+
+# Cast total_unique_bene as integer type
+df_ms_t2$total_unique_bene <- str_remove_all(df_ms_t2$total_unique_bene, ",")
+df_ms_t2$total_unique_bene <- as.integer(df_ms_t2$total_unique_bene)
+
+# Group by summary to get total counts
+df_ms_t2 <- df_ms_t2 %>%
+  group_by(race_cd, year_id) %>%
+  summarise(
+    total_unique_bene_sum = sum(total_unique_bene),
+    total_unique_hiv_bene = sum(hiv_unique_bene),
+    total_unique_sud_bene = sum(sud_unique_bene),
+    total_unique_hepc_bene = sum(hepc_unique_bene),
+    total_unique_hiv_sud_bene = sum(hiv_and_sud_unique_bene),
+    total_unique_hiv_hepc_bene = sum(hiv_and_hepc_unique_bene),
+    total_unique_sud_hepc_bene = sum(sud_and_hepc_unique_bene),
+    total_unique_hiv_sud_hepc_bene = sum(hiv_sud_hepc_unique_bene)
+  )
+
+# Calculate percentages
+df_ms_t2 <- df_ms_t2 %>%
+  mutate(
+    `hiv_bene_%` = (total_unique_hiv_bene / total_unique_bene_sum),
+    `sud_bene_%` = (total_unique_sud_bene / total_unique_bene_sum),
+    `hepc_bene_%` = (total_unique_hepc_bene / total_unique_bene_sum), 
+    `hiv_sud_bene_%` = (total_unique_hiv_sud_bene / total_unique_bene_sum), 
+    `hiv_hepc_bene_%` = (total_unique_hiv_hepc_bene / total_unique_bene_sum), 
+    `sud_hepc_bene_%` = (total_unique_sud_hepc_bene / total_unique_bene_sum),
+    `hiv_sud_hepc_bene_%` = (total_unique_hiv_sud_hepc_bene / total_unique_bene_sum)
+  )
+
+# Format table neatly
+format_ms_t2_cols <- function(count_col, percent_col) {
+  formatted_cols <- paste0(format(count_col, big.mark = ","), " (", percent(percent_col, accuracy = 0.001), ")")
+  return(formatted_cols)
+}
+
+df_ms_t2 <- df_ms_t2 %>% 
+  mutate(
+    "Total Unique Beneficiaries (count)" = format(total_unique_bene_sum, big.mark = ","),
+    "Total Unique HIV Beneficiaries (count, %)" = format_ms_t2_cols(total_unique_hiv_bene, `hiv_bene_%`),
+    "Total Unique SUD Beneficiaries (count, %)" = format_ms_t2_cols(total_unique_sud_bene, `sud_bene_%`),
+    "Total Unique HEPC Beneficiaries (count, %)" = format_ms_t2_cols(total_unique_hepc_bene, `hepc_bene_%`),
+    "Total Unique HIV/SUD Beneficiaries (count, %)" = format_ms_t2_cols(total_unique_hiv_sud_bene, `hiv_sud_bene_%`),
+    "Total Unique HIV/HEPC Beneficiaries (count, %)" = format_ms_t2_cols(total_unique_hiv_hepc_bene, `hiv_hepc_bene_%`),
+    "Total Unique SUD/HEPC Beneficiaries (count, %)" = format_ms_t2_cols(total_unique_sud_hepc_bene, `sud_hepc_bene_%`),
+    "Total Unique HIV/SUD/HEPC Beneficiaries (count, %)" = format_ms_t2_cols(total_unique_hiv_sud_hepc_bene, `hiv_sud_hepc_bene_%`)
+  )
+
+# Select final columns to show in output
+df_ms_t2 <- df_ms_t2[, c(1:2,18:25)]
+
+# Rename "year_id" -> Year, "race_cd" -> "Race"
+df_ms_t2 <- rename(df_ms_t2, "Year" = "year_id")
+df_ms_t2 <- rename(df_ms_t2, "Race" = "race_cd")
+
+# Save and output able as .csv
+fwrite(df_ms_t2, file.path(output_tables_dir, "MS_T2.csv"))
 
 ##----------------------------------------------------------------
 ## Exploring Data (safe to delete)
