@@ -49,7 +49,7 @@ df_rx_list_input_data_subset <- data.frame(directory = list_input_data) %>%
     sex_id = as.numeric(str_extract(directory, "(?<=sex_id=)\\d+"))
   ) %>%
   filter(!is.na(year_id) & !is.na(age_group_years_start) & !is.na(sex_id)) %>%
-  filter(age_group_years_start >= 60 & age_group_years_start <= 85) %>% # Only 2010 2014 2015 2016 2019 years available for RX
+  filter(age_group_years_start >= 65 & age_group_years_start <= 85) %>% # Only 2010 2014 2015 2016 2019 years available for RX
   filter(year_id %in% c(2010, 2014, 2015, 2016, 2019))
 
 # Save the filtered parameters to CSV for the runner script

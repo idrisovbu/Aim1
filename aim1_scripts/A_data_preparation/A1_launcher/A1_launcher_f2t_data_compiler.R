@@ -65,10 +65,10 @@ df_list_input_data_subset <- df_list_input_data_subset %>% mutate(toc = str_extr
 # Convert age_group_years_start to numeric if a character string
 df_list_input_data_subset$age_group_years_start <- as.numeric(df_list_input_data_subset$age_group_years_start)
 
-# Filter out ages below 60 and above 85, and specifically filter out toc = NF for 2019
+# Filter out ages below 65 and above 85, and specifically filter out toc = NF for 2019
 df_list_input_data_subset <- df_list_input_data_subset %>%
   filter(
-    age_group_years_start >= 60,
+    age_group_years_start >= 65,
     age_group_years_start <= 85,
     toc != "NF",
     year_id %in% c(2010, 2014, 2015, 2016, 2019)
@@ -119,7 +119,7 @@ jid <- SUBMIT_ARRAY_JOB(
   n_jobs = length(unique(df_list_input_data_subset$year_id)),
   memory = "250G", 
   threads = 1, 
-  time = "4:00:00", 
+  time = "1:00:00", # Only takes ~10 min or so
   user_email = paste0(user, "@uw.edu"),
   archive = FALSE,
   test = F # F = Full Run, T = Test Run (only run the first job in a batch)

@@ -36,7 +36,7 @@ if (Sys.info()["sysname"] == 'Linux'){
 ##----------------------------------------------------------------
 
 # List out processed RX Chunks
-date_of_rx_chunk_input <- "20250925" #format(Sys.time(), "%Y%m%d")
+date_of_rx_chunk_input <- "20260106" #format(Sys.time(), "%Y%m%d")
 
 rx_input_data_dir <- file.path("/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/", date_of_rx_chunk_input, "rx_chunks")
 
