@@ -23,7 +23,7 @@ if (Sys.info()["sysname"] == 'Linux'){
 ##----------------------------------------------------------------
 ## 1) Build parameters table: (file x cause) rows
 ##----------------------------------------------------------------
-run_date <- "bested" #last run on 20250914
+run_date <- "bested" #last run on 20260106
 
 fp_input_data <- file.path(l, "LU_CMS/DEX/hivsud/aim1/A_data_preparation", run_date, "aggregated_by_year")
 
@@ -77,7 +77,7 @@ bootstrap_iterations <- 1000
 # all 0's, or to leave the data as-is. Setting to all 0's "isolates" the cost of the cause, but drastically
 # reduces the overall cost. Leaving the has_ variables as-is makes the cost much higher than all 0's.
 # Options: T (all 0's for has_ variables), F (leaving data as-is)
-counterfactual_0 <- F
+counterfactual_0 <- T
 
 # Submit jobs
 jid <- SUBMIT_ARRAY_JOB(

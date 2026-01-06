@@ -23,7 +23,7 @@ if (dir.exists("/mnt/share/limited_use")) {
   
   # Whether the data has counterfactual all 0s, or the has_* variables have all 1's
   # Set T for has_0, F for has_1
-  counterfactual_0 <- T
+  counterfactual_0 <- F
   
   counterfactual_string <- "has_1"
   if (counterfactual_0) {
@@ -1526,6 +1526,39 @@ df_ms_t2 <- rename(df_ms_t2, "Race" = "race_cd")
 
 # Save and output able as .csv
 fwrite(df_ms_t2, file.path(output_tables_dir, "MS_T2.csv"))
+
+##----------------------------------------------------------------
+## 2.18 SS_T8
+#   Summary stats data
+#   By race, avg # of comorbidities 
+#   Min, Median, Mean, Mode, Max
+# Rows: 3 races
+##----------------------------------------------------------------
+# Mode function (why is there no built in one??)
+mode_stat <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
+df_ss_t8 <- data_list$`01.Summary_Statistics_inflation_adjusted_aggregated`
+
+# Group by and create our final summary stats
+df_ss_t8 <- df_ss_t8 %>%
+  group_by(race_cd) %>%
+  summarize(
+    "Min Avg Comorbidity per Beneficiary" = min(avg_cause_count_per_bene),
+    "Max Avg Comorbidity per Beneficiary" = max(avg_cause_count_per_bene),
+    "Median Avg Comorbidity per Beneficiary" = median(avg_cause_count_per_bene),
+    "Weighted Mean Avg Comorbidity per Beneficiary" = weighted.mean(avg_cause_count_per_bene, total_unique_bene),
+    "Mode Avg Comorbidity per Beneficiary" = mode_stat(avg_cause_count_per_bene)
+  )
+
+# Rename column
+df_ss_t8 <- df_ss_t8 %>% 
+  setnames(old = "race_cd", new = "Race")
+
+# Save and output able as .csv
+fwrite(df_ss_t8, file.path(output_tables_dir, "SS_T8.csv"))
 
 ##----------------------------------------------------------------
 ## Exploring Data (safe to delete)
