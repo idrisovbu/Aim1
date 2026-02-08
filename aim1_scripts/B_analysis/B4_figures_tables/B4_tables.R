@@ -19,11 +19,11 @@ date_today <- format(Sys.time(), "%Y%m%d")
 # Detect IHME cluster by checking for /mnt/share/limited_use
 if (dir.exists("/mnt/share/limited_use")) {
   # IHME/cluster environment
-  date_of_input <- "20260103" #11/08 was most recent normal 5 bootstrap run
+  date_of_input <- "20260107" #11/08 was most recent normal 5 bootstrap run
   
   # Whether the data has counterfactual all 0s, or the has_* variables have all 1's
   # Set T for has_0, F for has_1
-  counterfactual_0 <- F
+  counterfactual_0 <- T
   
   counterfactual_string <- "has_1"
   if (counterfactual_0) {
@@ -129,7 +129,9 @@ weighted_mean_all <- function(df, group_cols, value_cols, weight_col) {
 # Load and clean the mapping file
 # Detect IHME cluster by checking for /mnt/share/limited_use
 if (dir.exists("/mnt/share/limited_use")) {
-  fp_cause_map <- "/mnt/share/dex/us_county/maps/causelist_figures.csv"
+  #fp_cause_map <- "/mnt/share/dex/us_county/maps/causelist_figures.csv" ### 
+  ### Update Feb 7 2026 looks like above dir  with maps has been deleted by someone
+  fp_cause_map <- "/mnt/share/limited_use/LU_CMS/DEX/hivsud/aim1/A_data_preparation/Cause_list/acause_mapping_table.csv"
 } else {
   # Mac
   # TBD
@@ -1331,14 +1333,15 @@ fwrite(df_tpe9_final, file.path(output_tables_dir, "TPE_T9.csv"))
 
 df_ss_t4 <- data_list$`04.By_cause_inflation_adjusted_aggregated_unfiltered` 
 
-df_ss_t4 <- df_ss_t4%>%
+df_ss_t4 <- df_ss_t4 %>%
   group_by(acause_lvl2, cause_name_lvl2) %>%
-  summarize(
+  dplyr::summarize(
     avg_cost_per_bene = weighted.mean(mean_cost, total_row_count, na.rm = TRUE),
     avg_cost_hiv_per_bene = weighted.mean(mean_cost_hiv, total_row_count, na.rm = TRUE),
     avg_cost_sud_per_bene = weighted.mean(mean_cost_sud, total_row_count, na.rm = TRUE),
     avg_cost_hiv_sud_per_bene = weighted.mean(mean_cost_hiv_sud, total_row_count, na.rm = TRUE),
-    total_row_count = sum(total_row_count)
+    total_row_count = sum(total_row_count),
+    .groups = "drop"
   )
 
 # Save and output able as .csv
@@ -1430,7 +1433,7 @@ df_ss_t7 <- left_join(
 # Group by and create our final summary stats
 df_ss_t7 <- df_ss_t7 %>%
   group_by(cause_name_lvl2) %>%
-  summarize(
+  dplyr::summarize(
     "Median Max Cost per Bene" = median(max_cost_per_bene),
     "Median Max Cost per Bene (Winsorization)" = median(max_cost_per_bene_winsorized),
     "Mean Max Cost per Bene" = mean(max_cost_per_bene),
@@ -1606,4 +1609,248 @@ fwrite(df_ss_t8, file.path(output_tables_dir, "SS_T8.csv"))
 
 
 
+##########################################################################
+##########################################################################
+#
+# TABLE 2 AND TABLE 3: KEY MANUSCRIPT TABLES
+# 
+# Purpose: Creates two key manuscript tables with consistent formatting
+#   - Table 2: HIV and SUD Primary Condition Costs with Deltas by Year
+#   - Table 3: Incremental Costs of HIV and SUD Across 23 GBD Conditions
+#
+# Formatting follows Emily's advice:
+#   - Confidence intervals in separate columns (not squished with estimates)
+#   - Consistent column naming across tables
+#
+# Output files saved to: output_tables_dir (same as other tables)
+#
+##########################################################################
+##########################################################################
 
+##########################################################################
+# TABLE 2: HIV and SUD as Primary Conditions - Costs and Deltas by Year
+##########################################################################
+#
+# Shows:
+#   - Baseline predicted cost when HIV is primary (no SUD)
+#   - Incremental cost (delta) of adding SUD to HIV
+#   - Baseline predicted cost when SUD is primary (no HIV)
+#   - Incremental cost (delta) of adding HIV to SUD
+#
+# All estimates from g-computation with other comorbidities set to zero.
+#
+##########################################################################
+
+# # Read aggregated HIV and SUD files
+# df_hiv_agg <- read_csv(file.path(input_dir, "05.HIV_inflation_adjusted_aggregated.csv"),
+#                        show_col_types = FALSE)
+# df_sud_agg <- read_csv(file.path(input_dir, "05.SUD_inflation_adjusted_aggregated.csv"),
+#                        show_col_types = FALSE)
+# 
+# # Aggregate HIV data by year (weighted mean across race and age strata)
+# df_hiv_by_year <- df_hiv_agg %>%
+#   group_by(year_id) %>%
+#   summarise(
+#     # Baseline HIV cost (no SUD)
+#     hiv_baseline_mean = weighted.mean(mean_cost_hiv, total_row_count, na.rm = TRUE),
+#     hiv_baseline_lower = weighted.mean(lower_ci_hiv, total_row_count, na.rm = TRUE),
+#     hiv_baseline_upper = weighted.mean(upper_ci_hiv, total_row_count, na.rm = TRUE),
+#     # Delta: effect of adding SUD to HIV
+#     sud_delta_mean = weighted.mean(mean_delta_sud_only, total_row_count, na.rm = TRUE),
+#     sud_delta_lower = weighted.mean(lower_ci_delta_sud_only, total_row_count, na.rm = TRUE),
+#     sud_delta_upper = weighted.mean(upper_ci_delta_sud_only, total_row_count, na.rm = TRUE),
+#     .groups = "drop"
+#   )
+# 
+# # Aggregate SUD data by year (weighted mean across race and age strata)
+# df_sud_by_year <- df_sud_agg %>%
+#   group_by(year_id) %>%
+#   summarise(
+#     # Baseline SUD cost (no HIV)
+#     sud_baseline_mean = weighted.mean(mean_cost_sud, total_row_count, na.rm = TRUE),
+#     sud_baseline_lower = weighted.mean(lower_ci_sud, total_row_count, na.rm = TRUE),
+#     sud_baseline_upper = weighted.mean(upper_ci_sud, total_row_count, na.rm = TRUE),
+#     # Delta: effect of adding HIV to SUD
+#     hiv_delta_mean = weighted.mean(mean_delta_hiv_only, total_row_count, na.rm = TRUE),
+#     hiv_delta_lower = weighted.mean(lower_ci_delta_hiv_only, total_row_count, na.rm = TRUE),
+#     hiv_delta_upper = weighted.mean(upper_ci_delta_hiv_only, total_row_count, na.rm = TRUE),
+#     .groups = "drop"
+#   )
+# 
+# # Join HIV and SUD summaries
+# df_table2_raw <- df_hiv_by_year %>%
+#   left_join(df_sud_by_year, by = "year_id")
+# 
+# # Format Table 2 with separate CI columns (per Emily's advice)
+# TPE_T2_manuscript <- df_table2_raw %>%
+#   transmute(
+#     Year = year_id,
+#     
+#     # HIV as primary condition
+#     `Baseline Predicted Cost (HIV Alone)` = dollar(round(hiv_baseline_mean, 2)),
+#     `HIV Baseline 95% CI` = sprintf("(%s, %s)", 
+#                                     dollar(round(hiv_baseline_lower, 2)),
+#                                     dollar(round(hiv_baseline_upper, 2))),
+#     
+#     `Cost Delta when SUD Present` = dollar(round(sud_delta_mean, 2)),
+#     `SUD Delta 95% CI` = sprintf("(%s, %s)", 
+#                                  dollar(round(sud_delta_lower, 2)),
+#                                  dollar(round(sud_delta_upper, 2))),
+#     
+#     # SUD as primary condition
+#     `Baseline Predicted Cost (SUD Alone)` = dollar(round(sud_baseline_mean, 2)),
+#     `SUD Baseline 95% CI` = sprintf("(%s, %s)", 
+#                                     dollar(round(sud_baseline_lower, 2)),
+#                                     dollar(round(sud_baseline_upper, 2))),
+#     
+#     `Cost Delta when HIV Present` = dollar(round(hiv_delta_mean, 2)),
+#     `HIV Delta 95% CI` = sprintf("(%s, %s)", 
+#                                  dollar(round(hiv_delta_lower, 2)),
+#                                  dollar(round(hiv_delta_upper, 2)))
+#   )
+# 
+# # Export Table 2
+# write_csv(TPE_T2_manuscript, file.path(output_tables_dir, "Table2_HIV_SUD_Primary_by_Year.csv"))
+# cat("Created: Table2_HIV_SUD_Primary_by_Year.csv\n")
+# 
+# 
+# ##########################################################################
+# # TABLE 3: Incremental Costs of HIV and SUD Across 23 GBD Conditions
+# ##########################################################################
+# #
+# # Shows for each of 23 GBD conditions (j):
+# #   - Baseline predicted cost for condition j alone (no HIV, no SUD)
+# #   - Incremental cost (delta) of adding HIV to condition j
+# #   - Incremental cost (delta) of adding SUD to condition j
+# #   - Incremental cost (delta) of adding both HIV and SUD to condition j
+# #
+# # All estimates from g-computation with other comorbidities set to zero.
+# #
+# ##########################################################################
+# 
+# # Read the by-cause aggregated file
+# df_cause_agg <- read_csv(file.path(input_dir, "04.By_cause_subtable_by_cause.csv"),
+#                          show_col_types = FALSE)
+# 
+# # Format Table 3 with separate CI columns (per Emily's advice)
+# TPE_T3_manuscript <- df_cause_agg %>%
+#   # Filter out HIV and SUD (they are in Table 2)
+#   filter(!acause_lvl2 %in% c("hiv", "_subs")) %>%
+#   transmute(
+#     Condition = cause_name_lvl2,
+#     
+#     # Baseline cost (condition j alone, no HIV, no SUD)
+#     `Baseline Predicted Cost (Condition Alone)` = dollar(round(mean_cost, 2)),
+#     `Baseline 95% CI` = sprintf("(%s, %s)", 
+#                                 dollar(round(lower_ci, 2)),
+#                                 dollar(round(upper_ci, 2))),
+#     
+#     # HIV delta
+#     `Cost Delta when HIV Present` = dollar(round(mean_delta_hiv_only, 2)),
+#     `HIV Delta 95% CI` = sprintf("(%s, %s)", 
+#                                  dollar(round(lower_ci_delta_hiv_only, 2)),
+#                                  dollar(round(upper_ci_delta_hiv_only, 2))),
+#     
+#     # SUD delta
+#     `Cost Delta when SUD Present` = dollar(round(mean_delta_sud_only, 2)),
+#     `SUD Delta 95% CI` = sprintf("(%s, %s)", 
+#                                  dollar(round(lower_ci_delta_sud_only, 2)),
+#                                  dollar(round(upper_ci_delta_sud_only, 2))),
+#     
+#     # HIV + SUD delta (joint effect)
+#     `Cost Delta when HIV + SUD Present` = dollar(round(mean_delta_hiv_sud, 2)),
+#     `HIV+SUD Delta 95% CI` = sprintf("(%s, %s)", 
+#                                      dollar(round(lower_ci_delta_hiv_sud, 2)),
+#                                      dollar(round(upper_ci_delta_hiv_sud, 2)))
+#   ) %>%
+#   # Sort by baseline cost descending
+#   
+#   arrange(desc(parse_number(`Baseline Predicted Cost (Condition Alone)`)))
+# 
+# # Export Table 3
+# write_csv(TPE_T3_manuscript, file.path(output_tables_dir, "Table3_Incremental_Costs_by_Condition.csv"))
+# cat("Created: Table3_Incremental_Costs_by_Condition.csv\n")
+# 
+# 
+# 
+# 
+# ##----------------------------------------------------------------
+# ## 2.16 SS_T7 (CORRECTED)
+# #   Table 2 in Manuscript: Distribution of Annual Per-Beneficiary Spending 
+# #   Before and After 99.5th-Percentile Winsorization, by Disease Category
+# #
+# #   Properly aggregated to ONE ROW PER CAUSE using weighted statistics
+# #   
+# #   Columns:
+# #   - Median/Mean/Max of max_cost_per_bene (BEFORE winsorization)
+# #   - Median/Mean/Max after applying 99.5th percentile cap (AFTER winsorization)
+# #
+# # Rows: 25 diseases (including HIV and SUD)
+# ##----------------------------------------------------------------
+# 
+# df_ss_t7 <- data_list[["01.Summary_Statistics_inflation_adjusted_aggregated"]]
+# 
+# # Merge with df_map for proper cause names
+# df_ss_t7 <- left_join(
+#   x = df_ss_t7,
+#   y = df_map %>% select(c("acause_lvl2", "cause_name_lvl2")),
+#   by = "acause_lvl2"
+# )
+# 
+# # Helper function for weighted median
+# weighted_median <- function(x, w) {
+#   if (all(is.na(x)) || all(is.na(w))) return(NA_real_)
+#   valid <- !is.na(x) & !is.na(w) & w > 0
+#   x <- x[valid]
+#   w <- w[valid]
+#   if (length(x) == 0) return(NA_real_)
+#   ord <- order(x)
+#   x <- x[ord]
+#   w <- w[ord]
+#   cum_w <- cumsum(w) / sum(w)
+#   idx <- which(cum_w >= 0.5)[1]
+#   return(x[idx])
+# }
+# 
+# # Create winsorized max cost column if not present
+# # Winsorization caps max_cost_per_bene at quantile_99_cost_per_bene (99.5th percentile)
+# df_ss_t7 <- df_ss_t7 %>%
+#   mutate(
+#     max_cost_per_bene_winsorized = pmin(max_cost_per_bene, quantile_99_cost_per_bene, na.rm = TRUE)
+#   )
+# 
+# # Aggregate to one row per cause
+# df_ss_t7_final <- df_ss_t7 %>%
+#   group_by(cause_name_lvl2) %>%
+#   dplyr::summarize(
+#     # Weighted median (weighted by total_unique_bene)
+#     median_max_cost = weighted_median(max_cost_per_bene, total_unique_bene),
+#     median_max_cost_winsor = weighted_median(max_cost_per_bene_winsorized, total_unique_bene),
+#     
+#     # Weighted mean (weighted by total_unique_bene)
+#     mean_max_cost = weighted.mean(max_cost_per_bene, total_unique_bene, na.rm = TRUE),
+#     mean_max_cost_winsor = weighted.mean(max_cost_per_bene_winsorized, total_unique_bene, na.rm = TRUE),
+#     
+#     # True max across all strata
+#     max_max_cost = max(max_cost_per_bene, na.rm = TRUE),
+#     max_max_cost_winsor = max(max_cost_per_bene_winsorized, na.rm = TRUE),
+#     
+#     .groups = "drop"
+#   )
+# 
+# # Format as dollar amounts
+# df_ss_t7_formatted <- df_ss_t7_final %>%
+#   transmute(
+#     `Level 2 Cause` = cause_name_lvl2,
+#     `Median Max Cost per Bene` = dollar(round(median_max_cost, 2)),
+#     `Median Max Cost per Bene (Winsorization)` = dollar(round(median_max_cost_winsor, 2)),
+#     `Mean Max Cost per Bene` = dollar(round(mean_max_cost, 2)),
+#     `Mean Max Cost per Bene (Winsorization)` = dollar(round(mean_max_cost_winsor, 2)),
+#     `Max Max Cost per Bene` = dollar(round(max_max_cost, 0)),
+#     `Max Max Cost per Bene (Winsorization)` = dollar(round(max_max_cost_winsor, 0))
+#   )
+# 
+# # Save table
+# fwrite(df_ss_t7_formatted, file.path(output_tables_dir, "AppT2_SS_T7.csv"))
+# cat("Created: SS_T7.csv - Winsorization comparison by disease category (one row per cause)\n")
+# 

@@ -58,16 +58,16 @@ if (counterfactual_0) {
   counterfactual_string <- "has_0"
 }
 
-date_summary_stats <- "20260103"
+date_summary_stats <- "20260106"
 input_summary_stats <- file.path(base_dir, "01.Summary_Statistics", date_summary_stats)
 
-date_regression <- "20251216" #9/22 was experimental run with the "has_" variables included in the model, #12/12 is experimental and removes winsorization from the model
+date_regression <- "20260106"
 input_regression_estimates <- file.path(base_dir, "02.Regression_Estimates", date_regression, paste0("estimates_", counterfactual_string))
 
-date_meta_stats <- "20260103"
+date_meta_stats <- "20260106"
 input_meta_stats <- file.path(base_dir, "03.Meta_Statistics", date_meta_stats) 
 
-date_tpe <- "20251216" #12/12 is experimental and removes winsorization from model. #11/08 is most recent normal run w/ 5 bootstraps
+date_tpe <- "20260106"
 input_by_cause <- file.path(base_dir, "04.Two_Part_Estimates", date_tpe, paste0("by_cause_", counterfactual_string), "results")
 
 # Define output directory

@@ -18,11 +18,11 @@ date_today <- format(Sys.time(), "%Y%m%d")
 # Detect IHME cluster by checking for /mnt/share/limited_use
 if (dir.exists("/mnt/share/limited_use")) {
   # IHME/cluster environment
-  date_of_input <- "20251217" #11/08 was most recent normal 5 bootstrap run
+  date_of_input <- "20260107" #11/08 was most recent normal 5 bootstrap run
   
   # Whether the data has counterfactual all 0s, or the has_* variables have all 1's
   # Set T for has_0, F for has_1
-  counterfactual_0 <- F
+  counterfactual_0 <- T
   
   counterfactual_string <- "has_1"
   if (counterfactual_0) {

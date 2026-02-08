@@ -44,7 +44,7 @@ df_parameters_cause_hivsud <- fread(fp_parameters_cause_hivsud)
 df_parameters <- rbind(df_parameters_cause, df_parameters_cause_hivsud)
 
 # 04. Two Part Model Checking
-date_tpe <- "20251216"
+date_tpe <- "20260106"
 input_cause_has_0 <- file.path(base_dir, "04.Two_Part_Estimates", date_tpe, "by_cause_has_0", "results")
 input_cause_has_1 <- file.path(base_dir, "04.Two_Part_Estimates", date_tpe, "by_cause_has_1", "results")
 
