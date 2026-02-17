@@ -607,8 +607,7 @@ df_tpe_t1 <- df_tpe_t1 %>%
 fwrite(df_tpe_t1, file.path(output_tables_dir, "TPE_T1.csv"))
 
 
-
-
+#
 ##----------------------------------------------------------------
 ## 2.6 TPE_T2 - Average spending by age, all toc all years combined, 3 scenarios
 ##
